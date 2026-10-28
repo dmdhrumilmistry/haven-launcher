@@ -4,6 +4,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Release signing and versioning come from the environment so no secrets live in the repo.
+// CI sets these from GitHub secrets and the release tag; see .github/workflows/release.yml.
+val releaseKeystore: String? = System.getenv("HAVEN_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val ciVersionName: String? = System.getenv("HAVEN_VERSION_NAME")?.takeIf { it.isNotBlank() }
+val ciVersionCode: Int? = System.getenv("HAVEN_VERSION_CODE")?.toIntOrNull()
+
 android {
     namespace = "app.haven.launcher"
     compileSdk = 36
@@ -12,12 +18,25 @@ android {
         applicationId = "app.haven.launcher"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = ciVersionCode ?: 1
+        versionName = ciVersionName ?: "1.0.0"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("HAVEN_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("HAVEN_KEY_ALIAS")
+                keyPassword = System.getenv("HAVEN_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            // Without a keystore the release APK is left unsigned (fine for checking that it builds).
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -34,6 +53,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    dependenciesInfo {
+        // Keeps the APK free of the encrypted dependency blob, which F-Droid and others reject.
+        includeInApk = false
+        includeInBundle = false
     }
 }
 

@@ -1,0 +1,90 @@
+name: Release
+
+# Push a tag like v1.2.3 to build a signed APK and publish it as a GitHub release.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v1.0.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Work out version from tag
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' must look like v1.2.3 or v1.2.3-beta.1"
+            exit 1
+          fi
+          major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
+          if (( minor > 99 || patch > 99 )); then
+            echo "::error::Minor and patch must be 0-99 so version codes keep increasing"
+            exit 1
+          fi
+          # v1.2.3 -> 10203. Always increases with the version, which Android requires for updates.
+          echo "HAVEN_VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
+          echo "HAVEN_VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_ENV"
+          [[ -n "${BASH_REMATCH[4]}" ]] && echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV" || true
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.HAVEN_KEYSTORE_BASE64 }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" ]]; then
+            echo "::error::Missing secret HAVEN_KEYSTORE_BASE64. See 'Releases' in README.md."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "HAVEN_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build signed release APK
+        env:
+          HAVEN_KEYSTORE_PASSWORD: ${{ secrets.HAVEN_KEYSTORE_PASSWORD }}
+          HAVEN_KEY_ALIAS: ${{ secrets.HAVEN_KEY_ALIAS }}
+          HAVEN_KEY_PASSWORD: ${{ secrets.HAVEN_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Verify signature and prepare files
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk"
+          mkdir -p dist
+          cp "$apk" "dist/haven-launcher-$TAG.apk"
+          (cd dist && sha256sum "haven-launcher-$TAG.apk" > "haven-launcher-$TAG.apk.sha256")
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "Haven $TAG" --generate-notes --verify-tag $PRERELEASE
+          fi
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

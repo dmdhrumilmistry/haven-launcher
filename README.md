@@ -70,7 +70,54 @@ Needs JDK 17+ and the Android SDK (platform 36).
 
 Install it, then open **Haven Settings** and tap **Set as home app** (or pick Haven when you press Home).
 
-For a release build, add your own signing config in `app/build.gradle.kts` and run `./gradlew assembleRelease`.
+## CI and releases
+
+- **Build** (`.github/workflows/build.yml`): every push to `main` and every pull request builds the debug APK and an unsigned release (so R8/minify problems show up early) and runs lint. The debug APK and lint report are attached to the run as artifacts.
+- **Release** (`.github/workflows/release.yml`): pushing a tag like `v1.2.3` builds a signed release APK, verifies the signature and publishes a GitHub release with the APK and its SHA-256. Tags with a suffix (`v1.3.0-beta.1`) become pre-releases.
+- **Dependabot** keeps Gradle dependencies and GitHub Actions up to date weekly.
+
+Versions come from the tag: `v1.2.3` becomes version name `1.2.3` and version code `10203`, so every release can update the previous one. Minor and patch must stay between 0 and 99.
+
+### One-time setup: signing key
+
+Android only installs updates signed with the same key as the original, so create one key and keep it safe forever. Losing it means people would have to uninstall to update.
+
+```bash
+keytool -genkeypair -v -keystore haven-release.jks -alias haven \
+  -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then add four repository secrets (Settings > Secrets and variables > Actions), for example with the GitHub CLI:
+
+```bash
+base64 -w0 haven-release.jks | gh secret set HAVEN_KEYSTORE_BASE64
+gh secret set HAVEN_KEYSTORE_PASSWORD   # the store password you chose
+gh secret set HAVEN_KEY_ALIAS --body haven
+gh secret set HAVEN_KEY_PASSWORD        # the key password (same as store password if you didn't set one)
+```
+
+Back up `haven-release.jks` and its passwords somewhere offline, and never commit them.
+
+### Cutting a release
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+To rebuild an existing tag (for example after fixing the secrets), run the Release workflow manually from the Actions tab and enter the tag.
+
+### Signed builds locally
+
+The same environment variables work on your machine:
+
+```bash
+HAVEN_KEYSTORE_PATH=/path/to/haven-release.jks \
+HAVEN_KEYSTORE_PASSWORD=... HAVEN_KEY_ALIAS=haven HAVEN_KEY_PASSWORD=... \
+./gradlew assembleRelease
+```
+
+Without them, `assembleRelease` still works but produces an unsigned APK.
 
 ## Project layout
 
