@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Haven</string>
+    <string name="settings_launcher_label">Haven Settings</string>
+
+    <!-- Accessibility service (shown in system Accessibility settings) -->
+    <string name="a11y_service_label">Haven - screen lock gesture</string>
+    <string name="a11y_service_description">Lets Haven lock your screen when you double-tap the home screen, and open notifications when you swipe down. Haven does not read or collect anything on your screen, and it has no internet access.</string>
+
+    <!-- Profiles -->
+    <string name="profile_personal">Personal</string>
+    <string name="profile_work">Work</string>
+    <string name="profile_private">Private</string>
+    <string name="profile_clone">Clone</string>
+
+    <!-- Home -->
+    <string name="home_empty_hint">Your favorite apps go here. Long-press any app in the drawer and choose \"Add to home\".</string>
+    <string name="open_app_drawer">All apps</string>
+    <string name="open_alarms">Open alarms</string>
+    <string name="open_calendar">Open calendar</string>
+    <string name="date_with_alarm">%1$s  ·  Alarm %2$s</string>
+    <string name="more_options">More options</string>
+
+    <!-- Drawer & search -->
+    <string name="search_apps">Search apps</string>
+    <string name="clear_search">Clear search</string>
+    <string name="launcher_settings">Haven settings</string>
+    <string name="search_no_results">No apps match \"%1$s\"</string>
+    <string name="search_web">Search the web for \"%1$s\"</string>
+    <string name="search_store">Search app store for \"%1$s\"</string>
+    <string name="no_apps_title">Nothing here yet</string>
+    <string name="no_apps_body_hidden">No apps to show. If you hid some, you can bring them back in Haven settings > Hidden apps.</string>
+    <string name="no_apps_body_profile">Apps installed in this profile will appear here.</string>
+    <string name="work_paused_title">Work apps are paused</string>
+    <string name="work_paused_body">Work apps are paused. You won\'t get notifications from them.</string>
+    <string name="work_paused_prompt">Turn on work apps to open this app? You\'ll start getting work notifications again.</string>
+    <string name="private_locked_title">Private space is locked</string>
+    <string name="private_locked_body">Unlock it to see and open your private apps.</string>
+    <string name="private_unlocked">Private space is unlocked</string>
+    <string name="app_paused">Paused</string>
+    <string name="app_suspended">Paused by Digital Wellbeing</string>
+
+    <!-- Actions -->
+    <string name="action_add">Add</string>
+    <string name="action_add_to_home">Add to home</string>
+    <string name="action_remove_from_home">Remove from home</string>
+    <string name="action_add_shortcut_to_home">Add shortcut to home</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_hide">Hide from app list</string>
+    <string name="action_unhide">Unhide</string>
+    <string name="action_app_info">App info</string>
+    <string name="action_uninstall">Uninstall</string>
+    <string name="action_open">Open</string>
+    <string name="action_save">Save</string>
+    <string name="action_reset">Reset</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_back">Back</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_open_settings">Open settings</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="action_pause_work">Pause work apps</string>
+    <string name="action_unlock">Unlock</string>
+    <string name="action_lock">Lock</string>
+    <string name="action_wallpaper">Wallpaper</string>
+    <string name="action_edit_home">Edit home apps</string>
+    <string name="action_set_default">Set as home app</string>
+    <string name="action_move_up">Move %1$s up</string>
+    <string name="action_move_down">Move %1$s down</string>
+    <string name="action_remove_item">Remove %1$s</string>
+    <string name="action_notifications">Open notifications</string>
+    <string name="action_search">Search apps</string>
+    <string name="action_lock_screen">Lock screen</string>
+    <string name="action_nothing">Do nothing</string>
+
+    <!-- Rename -->
+    <string name="rename_title">Rename app</string>
+    <string name="rename_original">Original name: %1$s</string>
+
+    <!-- Feedback -->
+    <string name="added_to_home">Added to home</string>
+    <string name="hidden_toast">%1$s hidden. Find it in Haven settings > Hidden apps.</string>
+    <string name="add_shortcut_title">Add to home screen?</string>
+    <string name="error_add_shortcut">Couldn\'t add this shortcut</string>
+    <string name="error_cant_open">Couldn\'t open %1$s</string>
+    <string name="error_no_app">No app can do that</string>
+    <string name="error_notifications">Couldn\'t open notifications on this device</string>
+
+    <!-- Prompts -->
+    <string name="lock_setup_title">Double-tap to lock</string>
+    <string name="lock_setup_body">Android only lets a home screen lock the phone through an accessibility service.\n\nHaven\'s service does exactly one thing: lock the screen when you double-tap (and open notifications if you swipe down). It can\'t see your screen, doesn\'t collect anything and Haven has no internet access.\n\nIn the next screen, open \"Haven - screen lock gesture\" and turn it on.</string>
+    <string name="need_default_title">Make Haven your home app</string>
+    <string name="need_default_body">Android only allows your current home app to pause work apps or lock your private space.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Haven settings</string>
+    <string name="default_banner_title">Haven isn\'t your home app yet</string>
+    <string name="default_banner_body">Set it as your home app to use it when you press Home. You can switch back at any time.</string>
+    <string name="section_home">Home screen</string>
+    <string name="section_drawer">App drawer</string>
+    <string name="section_search">Search</string>
+    <string name="section_gestures">Gestures</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="section_backup">Backup</string>
+    <string name="section_about">About</string>
+
+    <string name="settings_home_apps">Home apps</string>
+    <string name="settings_add_home_apps">Add apps</string>
+    <string name="settings_hidden_apps">Hidden apps</string>
+    <string name="home_apps_hint">Reorder or remove what\'s on your home screen.</string>
+    <string name="unavailable_app">Unavailable app</string>
+    <string name="unavailable_summary">Not installed or currently unavailable</string>
+    <string name="shortcut_label">Shortcut</string>
+    <string name="hidden_none">None</string>
+    <string name="hidden_empty">No hidden apps. Long-press any app and choose \"Hide from app list\".</string>
+    <string name="hidden_hint">Hidden apps stay installed. They just don\'t show up in your app list.</string>
+
+    <string name="setting_home_style">Style</string>
+    <string name="home_style_text">Names only</string>
+    <string name="home_style_icons_text">Icons and names</string>
+    <string name="home_style_dock">Icon grid</string>
+    <string name="setting_alignment">Alignment</string>
+    <string name="align_start">Left</string>
+    <string name="align_center">Center</string>
+    <string name="align_end">Right</string>
+    <string name="setting_position">Position</string>
+    <string name="position_center">Middle</string>
+    <string name="position_bottom">Bottom (easier to reach)</string>
+    <string name="setting_show_clock">Show clock</string>
+    <string name="setting_clock_format">Clock format</string>
+    <string name="clock_system">Follow system</string>
+    <string name="clock_12">12-hour</string>
+    <string name="clock_24">24-hour</string>
+    <string name="setting_clock_size">Clock size</string>
+    <string name="size_small">Small</string>
+    <string name="size_medium">Medium</string>
+    <string name="size_large">Large</string>
+    <string name="setting_show_date">Show date</string>
+    <string name="setting_drawer_button">Show app drawer button</string>
+    <string name="setting_drawer_button_summary">A small arrow at the bottom, for when swiping isn\'t convenient</string>
+
+    <string name="setting_layout">Layout</string>
+    <string name="layout_list">List</string>
+    <string name="layout_grid">Grid</string>
+    <string name="setting_columns">Columns</string>
+    <string name="columns_auto">Automatic</string>
+    <string name="setting_grid_labels">Show app names</string>
+    <string name="setting_list_icons">Show icons</string>
+    <string name="setting_icon_size">Icon size</string>
+    <string name="setting_icon_shape">Icon shape</string>
+    <string name="shape_system">System default</string>
+    <string name="shape_circle">Circle</string>
+    <string name="shape_squircle">Squircle</string>
+    <string name="shape_rounded">Rounded square</string>
+    <string name="setting_themed_icons">Themed icons</string>
+    <string name="setting_themed_icons_summary">Single-color icons that match your theme, for apps that support it</string>
+    <string name="setting_profile_tabs">Separate work apps</string>
+    <string name="setting_profile_tabs_summary">Show work apps in their own tab. Private space always has its own tab.</string>
+
+    <string name="setting_auto_keyboard">Show keyboard when opening apps</string>
+    <string name="setting_search_bottom">Search bar at the bottom</string>
+    <string name="setting_search_bottom_summary">Easier to reach with one hand</string>
+    <string name="setting_auto_launch">Open when only one app matches</string>
+    <string name="setting_auto_launch_summary">Never triggers while you\'re deleting</string>
+    <string name="setting_web_search">Offer web and app store search</string>
+    <string name="setting_search_hidden">Include hidden apps in search</string>
+    <string name="setting_search_hidden_summary">Hidden apps stay out of the list but can still be found by name</string>
+
+    <string name="gesture_swipe_up">Swipe up</string>
+    <string name="gesture_swipe_up_value">Open app drawer</string>
+    <string name="gesture_swipe_down">Swipe down</string>
+    <string name="gesture_double_tap">Double-tap</string>
+    <string name="gesture_long_press">Long-press empty space</string>
+    <string name="gesture_long_press_value">Wallpaper, home apps and settings</string>
+    <string name="lock_setup_needed">Finish setting up double-tap to lock</string>
+    <string name="lock_setup_needed_summary">Needs Haven\'s screen lock service to be turned on</string>
+
+    <string name="setting_theme">Theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="setting_dynamic_color">Colors from wallpaper</string>
+    <string name="setting_dynamic_color_summary">Use your Material You colors</string>
+    <string name="setting_home_text_color">Home screen text</string>
+    <string name="text_color_auto">Automatic (based on wallpaper)</string>
+    <string name="text_color_light">Light</string>
+    <string name="text_color_dark">Dark</string>
+    <string name="setting_dim">Dim wallpaper</string>
+    <string name="setting_drawer_opacity">App drawer background</string>
+    <string name="setting_text_size">Text size</string>
+    <string name="setting_hide_status_bar">Hide status bar on home</string>
+    <string name="setting_hide_status_bar_summary">Swipe from the top edge to see it</string>
+
+    <string name="backup_export">Export settings</string>
+    <string name="backup_export_summary">Save your layout, names and preferences to a file</string>
+    <string name="backup_import">Import settings</string>
+    <string name="backup_import_summary">Restore from a Haven backup file</string>
+    <string name="backup_saved">Settings exported</string>
+    <string name="backup_failed">Couldn\'t save the file</string>
+    <string name="backup_restored">Settings restored</string>
+    <string name="backup_invalid">That file isn\'t a Haven backup</string>
+    <string name="reset_all">Reset all settings</string>
+    <string name="reset_all_summary">Back to defaults. Your apps aren\'t affected.</string>
+    <string name="reset_all_confirm">This clears your home apps, hidden apps, custom names and preferences. Installed apps aren\'t affected.</string>
+
+    <string name="about_privacy">Private by design</string>
+    <string name="about_privacy_summary">No ads, no tracking, no accounts. Haven has no internet permission, so nothing ever leaves your phone.</string>
+    <string name="about_default_app">Default home app</string>
+    <string name="about_default_app_summary">Change which app opens when you press Home</string>
+    <string name="about_version">Version</string>
+
+    <plurals name="home_apps_count">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="hidden_count">
+        <item quantity="one">%d app hidden</item>
+        <item quantity="other">%d apps hidden</item>
+    </plurals>
+</resources>

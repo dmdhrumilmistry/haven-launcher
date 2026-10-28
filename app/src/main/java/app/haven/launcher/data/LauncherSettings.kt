@@ -1,0 +1,218 @@
+package app.haven.launcher.data
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class TextColorMode { AUTO, LIGHT, DARK }
+enum class ClockFormat { SYSTEM, H12, H24 }
+enum class ClockSize { SMALL, MEDIUM, LARGE }
+enum class HomeAlignment { START, CENTER, END }
+enum class HomeStyle { TEXT, ICONS_AND_TEXT, DOCK }
+enum class HomePosition { CENTER, BOTTOM }
+enum class DrawerLayout { LIST, GRID }
+enum class IconSize(val dp: Int) { SMALL(40), MEDIUM(48), LARGE(56) }
+enum class IconShape { SYSTEM, CIRCLE, SQUIRCLE, ROUNDED_SQUARE }
+enum class SwipeDownAction { NOTIFICATIONS, SEARCH, NONE }
+enum class DoubleTapAction { LOCK, NONE }
+
+/**
+ * Something pinned to the home screen: either an app or a pinned shortcut (e.g. a website a browser
+ * added via "Add to home screen").
+ *
+ * Users are stored by serial number because [android.os.UserHandle] isn't stable across reboots
+ * in a persistable form, while the serial number is.
+ */
+sealed interface HomeItem {
+    val id: String
+
+    data class App(val appKey: String) : HomeItem {
+        override val id get() = "app:$appKey"
+    }
+
+    data class Shortcut(
+        val packageName: String,
+        val shortcutId: String,
+        val userSerial: Long,
+        val label: String,
+    ) : HomeItem {
+        override val id get() = "sc:$packageName#$userSerial#$shortcutId"
+    }
+}
+
+/**
+ * Every user-facing preference in one immutable object. Defaults are chosen to be calm and
+ * familiar out of the box; everything else is opt-in.
+ */
+data class LauncherSettings(
+    // Appearance
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val dynamicColor: Boolean = true,
+    val homeTextColor: TextColorMode = TextColorMode.AUTO,
+    val wallpaperDim: Float = 0f,
+    val textScale: Float = 1f,
+    val hideStatusBar: Boolean = false,
+    val drawerOpacity: Float = 0.92f,
+
+    // Home
+    val showClock: Boolean = true,
+    val clockFormat: ClockFormat = ClockFormat.SYSTEM,
+    val clockSize: ClockSize = ClockSize.MEDIUM,
+    val showDate: Boolean = true,
+    val homeAlignment: HomeAlignment = HomeAlignment.START,
+    val homeStyle: HomeStyle = HomeStyle.TEXT,
+    val homePosition: HomePosition = HomePosition.CENTER,
+    val showDrawerButton: Boolean = true,
+    val favorites: List<HomeItem> = emptyList(),
+    val favoritesSeeded: Boolean = false,
+
+    // App drawer
+    val drawerLayout: DrawerLayout = DrawerLayout.LIST,
+    val gridColumns: Int = 0, // 0 = adapt to screen width
+    val showGridLabels: Boolean = true,
+    val showListIcons: Boolean = true,
+    val iconSize: IconSize = IconSize.MEDIUM,
+    val iconShape: IconShape = IconShape.SYSTEM,
+    val themedIcons: Boolean = false,
+    val separateProfileTabs: Boolean = true,
+
+    // Search
+    val autoShowKeyboard: Boolean = true,
+    val searchBarAtBottom: Boolean = false,
+    val autoLaunchSingleResult: Boolean = false,
+    val showWebSearch: Boolean = true,
+    val searchHiddenApps: Boolean = false,
+
+    // Gestures
+    val swipeDownAction: SwipeDownAction = SwipeDownAction.NOTIFICATIONS,
+    val doubleTapAction: DoubleTapAction = DoubleTapAction.NONE,
+
+    // Per-app customisation (keys are AppKey strings)
+    val hiddenApps: Set<String> = emptySet(),
+    val customLabels: Map<String, String> = emptyMap(),
+) {
+    fun isFavorite(appKey: String) = favorites.any { it is HomeItem.App && it.appKey == appKey }
+
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("version", SCHEMA_VERSION)
+        put("themeMode", themeMode.name)
+        put("dynamicColor", dynamicColor)
+        put("homeTextColor", homeTextColor.name)
+        put("wallpaperDim", wallpaperDim.toDouble())
+        put("textScale", textScale.toDouble())
+        put("hideStatusBar", hideStatusBar)
+        put("drawerOpacity", drawerOpacity.toDouble())
+        put("showClock", showClock)
+        put("clockFormat", clockFormat.name)
+        put("clockSize", clockSize.name)
+        put("showDate", showDate)
+        put("homeAlignment", homeAlignment.name)
+        put("homeStyle", homeStyle.name)
+        put("homePosition", homePosition.name)
+        put("showDrawerButton", showDrawerButton)
+        put("favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
+        put("favoritesSeeded", favoritesSeeded)
+        put("drawerLayout", drawerLayout.name)
+        put("gridColumns", gridColumns)
+        put("showGridLabels", showGridLabels)
+        put("showListIcons", showListIcons)
+        put("iconSize", iconSize.name)
+        put("iconShape", iconShape.name)
+        put("themedIcons", themedIcons)
+        put("separateProfileTabs", separateProfileTabs)
+        put("autoShowKeyboard", autoShowKeyboard)
+        put("searchBarAtBottom", searchBarAtBottom)
+        put("autoLaunchSingleResult", autoLaunchSingleResult)
+        put("showWebSearch", showWebSearch)
+        put("searchHiddenApps", searchHiddenApps)
+        put("swipeDownAction", swipeDownAction.name)
+        put("doubleTapAction", doubleTapAction.name)
+        put("hiddenApps", JSONArray().apply { hiddenApps.sorted().forEach { put(it) } })
+        put("customLabels", JSONObject().apply { customLabels.forEach { (k, v) -> put(k, v) } })
+    }
+
+    companion object {
+        const val SCHEMA_VERSION = 1
+
+        /**
+         * Lenient parser: unknown keys are ignored and missing or malformed values fall back to
+         * defaults, so old backups and hand-edited files never crash the launcher.
+         */
+        fun fromJson(json: JSONObject): LauncherSettings {
+            val d = LauncherSettings()
+            return LauncherSettings(
+                themeMode = json.enum("themeMode", d.themeMode),
+                dynamicColor = json.optBoolean("dynamicColor", d.dynamicColor),
+                homeTextColor = json.enum("homeTextColor", d.homeTextColor),
+                wallpaperDim = json.float("wallpaperDim", d.wallpaperDim, 0f, 0.8f),
+                textScale = json.float("textScale", d.textScale, 0.8f, 1.4f),
+                hideStatusBar = json.optBoolean("hideStatusBar", d.hideStatusBar),
+                drawerOpacity = json.float("drawerOpacity", d.drawerOpacity, 0.5f, 1f),
+                showClock = json.optBoolean("showClock", d.showClock),
+                clockFormat = json.enum("clockFormat", d.clockFormat),
+                clockSize = json.enum("clockSize", d.clockSize),
+                showDate = json.optBoolean("showDate", d.showDate),
+                homeAlignment = json.enum("homeAlignment", d.homeAlignment),
+                homeStyle = json.enum("homeStyle", d.homeStyle),
+                homePosition = json.enum("homePosition", d.homePosition),
+                showDrawerButton = json.optBoolean("showDrawerButton", d.showDrawerButton),
+                favorites = json.optJSONArray("favorites")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::homeItemFromJson) }
+                }?.distinctBy { it.id } ?: d.favorites,
+                favoritesSeeded = json.optBoolean("favoritesSeeded", d.favoritesSeeded),
+                drawerLayout = json.enum("drawerLayout", d.drawerLayout),
+                gridColumns = json.optInt("gridColumns", d.gridColumns).let { if (it == 0 || it in 3..7) it else 0 },
+                showGridLabels = json.optBoolean("showGridLabels", d.showGridLabels),
+                showListIcons = json.optBoolean("showListIcons", d.showListIcons),
+                iconSize = json.enum("iconSize", d.iconSize),
+                iconShape = json.enum("iconShape", d.iconShape),
+                themedIcons = json.optBoolean("themedIcons", d.themedIcons),
+                separateProfileTabs = json.optBoolean("separateProfileTabs", d.separateProfileTabs),
+                autoShowKeyboard = json.optBoolean("autoShowKeyboard", d.autoShowKeyboard),
+                searchBarAtBottom = json.optBoolean("searchBarAtBottom", d.searchBarAtBottom),
+                autoLaunchSingleResult = json.optBoolean("autoLaunchSingleResult", d.autoLaunchSingleResult),
+                showWebSearch = json.optBoolean("showWebSearch", d.showWebSearch),
+                searchHiddenApps = json.optBoolean("searchHiddenApps", d.searchHiddenApps),
+                swipeDownAction = json.enum("swipeDownAction", d.swipeDownAction),
+                doubleTapAction = json.enum("doubleTapAction", d.doubleTapAction),
+                hiddenApps = json.optJSONArray("hiddenApps")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { arr.optString(it).takeIf(String::isNotBlank) }.toSet()
+                } ?: d.hiddenApps,
+                customLabels = json.optJSONObject("customLabels")?.let { obj ->
+                    obj.keys().asSequence()
+                        .mapNotNull { k -> obj.optString(k).trim().takeIf { it.isNotEmpty() }?.let { k to it } }
+                        .toMap()
+                } ?: d.customLabels,
+            )
+        }
+
+        private fun HomeItem.toJson(): JSONObject = when (this) {
+            is HomeItem.App -> JSONObject().put("type", "app").put("key", appKey)
+            is HomeItem.Shortcut -> JSONObject()
+                .put("type", "shortcut")
+                .put("package", packageName)
+                .put("id", shortcutId)
+                .put("serial", userSerial)
+                .put("label", label)
+        }
+
+        private fun homeItemFromJson(o: JSONObject): HomeItem? = when (o.optString("type")) {
+            "app" -> o.optString("key").takeIf { AppKey.parse(it) != null }?.let { HomeItem.App(it) }
+            "shortcut" -> {
+                val pkg = o.optString("package")
+                val id = o.optString("id")
+                if (pkg.isBlank() || id.isBlank()) null
+                else HomeItem.Shortcut(pkg, id, o.optLong("serial", 0L), o.optString("label"))
+            }
+            else -> null
+        }
+
+        private inline fun <reified E : Enum<E>> JSONObject.enum(key: String, default: E): E =
+            optString(key).let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
+
+        private fun JSONObject.float(key: String, default: Float, min: Float, max: Float): Float {
+            val v = optDouble(key, default.toDouble()).toFloat()
+            return if (v.isNaN()) default else v.coerceIn(min, max)
+        }
+    }
+}

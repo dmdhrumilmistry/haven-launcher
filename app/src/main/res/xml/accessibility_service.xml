@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal service: no window content access, no event types. It can only perform global actions
+     (lock screen, open notifications) when the user asks for them with a gesture. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/a11y_service_description"
+    android:notificationTimeout="0" />
