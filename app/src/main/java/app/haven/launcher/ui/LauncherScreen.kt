@@ -82,6 +82,10 @@ import app.haven.launcher.widgets.HomeWidgetStack
 import app.haven.launcher.widgets.HomeWidgets
 import app.haven.launcher.widgets.WidgetActionsSheet
 import app.haven.launcher.widgets.WidgetPicker
+import app.haven.launcher.data.ProfileType
+import app.haven.launcher.system.CloneSupport
+import app.haven.launcher.system.DeviceAuth
+import app.haven.launcher.system.findComponentActivity
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -98,6 +102,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val search by vm.search.collectAsStateWithLifecycle()
     val allApps by vm.allApps.collectAsStateWithLifecycle()
     val prompt by vm.prompt.collectAsStateWithLifecycle()
+    val suggestions by vm.suggestions.collectAsStateWithLifecycle()
+    val newApps by vm.newApps.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val view = LocalView.current
@@ -164,6 +170,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     // Coming back from an app should land on a calm home screen, not a half-finished search.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        // Hidden apps relock as soon as the home screen leaves view.
+        vm.setHiddenUnlocked(false)
         sheetApp = null
         sheetShortcut = null
         renameApp = null
@@ -290,6 +298,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             // Settings imported from a "full" build may ask for this; ignore it where unsupported.
             onDoubleTap = if (BuildConfig.LOCK_GESTURE && settings.doubleTapAction == DoubleTapAction.LOCK) ({ vm.lockScreen() }) else null,
             onBackgroundLongPress = { homeMenu = true },
+            onReorder = vm::reorderHome,
         )
     }
 
@@ -304,6 +313,13 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             },
             onSetQuiet = { profile, quiet -> vm.setQuietMode(profile, quiet) },
             onOpenSettings = { SystemActions.openLauncherSettings(context) },
+            onUnlockHidden = {
+                context.findComponentActivity()?.let { activity ->
+                    DeviceAuth.authenticate(activity, resources.getString(R.string.auth_hidden_title), null) {
+                        vm.setHiddenUnlocked(true)
+                    }
+                }
+            },
         )
     }
 
@@ -324,7 +340,10 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                             HomeWidgetStack(
                                 widgets = settings.widgets,
                                 controller = widgets,
-                                onLongPress = { sheetWidget = it },
+                                onLongPress = {
+                                    if (settings.lockHomeLayout) SystemActions.toast(context, resources.getString(R.string.home_layout_locked))
+                                    else sheetWidget = it
+                                },
                                 contentColor = homeColor,
                                 modifier = widgetModifier,
                             )
@@ -345,7 +364,9 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         loaded = snapshot.loaded,
                         selectedTab = selectedTab,
                         query = query,
-                        results = search.results,
+                        search = search,
+                        suggestions = suggestions,
+                        newApps = newApps,
                         searchFocus = searchFocus,
                         callbacks = drawerCallbacks,
                         modifier = Modifier
@@ -395,6 +416,12 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         renameApp = live
                         sheetApp = null
                     },
+                    onClone = if (live.profileType == ProfileType.PERSONAL && CloneSupport.cloneSettingsIntent(context) != null) {
+                        {
+                            sheetApp = null
+                            CloneSupport.openCloneSettings(context)
+                        }
+                    } else null,
                     onToggleHidden = {
                         vm.setHidden(live, !live.isHidden)
                         if (!live.isHidden) SystemActions.toast(context, resources.getString(R.string.hidden_toast, live.label))
@@ -428,7 +455,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 ModalBottomSheet(onDismissRequest = { homeMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
                     ActionRow(Icons.Filled.Add, stringResource(R.string.action_widgets)) {
                         homeMenu = false
-                        widgetPicker = true
+                        if (settings.lockHomeLayout) SystemActions.toast(context, resources.getString(R.string.home_layout_locked))
+                        else widgetPicker = true
                     }
                     ActionRow(Icons.Filled.Home, stringResource(R.string.action_wallpaper)) {
                         homeMenu = false
@@ -452,6 +480,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 WidgetPicker(
                     host = widgets.host,
                     apps = allApps,
+                    excludeHidden = settings.lockHiddenApps,
                     onPick = { info ->
                         widgetPicker = false
                         widgets.add(info)

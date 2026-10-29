@@ -12,6 +12,8 @@ import androidx.lifecycle.viewModelScope
 import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.AppsSnapshot
+import app.haven.launcher.data.Calculator
+import app.haven.launcher.data.LaunchStats
 import app.haven.launcher.data.HomeItem
 import app.haven.launcher.data.InstalledApp
 import app.haven.launcher.data.LauncherSettings
@@ -61,7 +63,14 @@ data class DrawerModel(
     val mergedWorkProfile: Profile? = null,
 )
 
-data class SearchState(val query: String, val results: List<AppItem>)
+data class SearchState(
+    val query: String,
+    val results: List<AppItem>,
+    /** Answer if the query is arithmetic, e.g. "12*7" -> "84". */
+    val calculation: String? = null,
+    /** Hidden apps are searchable but locked: offer to unlock instead of silently leaving them out. */
+    val canUnlockHidden: Boolean = false,
+)
 
 /** One-off UI requests that need a dialog. */
 sealed interface LauncherPrompt {
@@ -96,19 +105,64 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
+    private val stats = application.haven.launchStats
+
+    /** Unlocked with the device's screen lock; relocks whenever the launcher leaves the screen. */
+    private val _hiddenUnlocked = MutableStateFlow(false)
+    val hiddenUnlocked: StateFlow<Boolean> = _hiddenUnlocked.asStateFlow()
+
+    fun setHiddenUnlocked(unlocked: Boolean) {
+        _hiddenUnlocked.value = unlocked
+    }
+
     /** Results tagged with the query that produced them, so nothing acts on stale results. */
     val search: StateFlow<SearchState> =
-        combine(_query, allApps, settings.map { it.searchHiddenApps }.distinctUntilChanged()) { q, apps, includeHidden ->
-            SearchState(q, if (q.isBlank()) emptyList() else apps.asSequence()
+        combine(
+            _query,
+            allApps,
+            settings.map { it.searchHiddenApps to it.lockHiddenApps }.distinctUntilChanged(),
+            _hiddenUnlocked,
+        ) { q, apps, (searchHidden, locked), unlocked ->
+            val includeHidden = searchHidden && (!locked || unlocked)
+            SearchState(
+                query = q,
+                calculation = if (q.isBlank()) null else Calculator.evaluate(q),
+                canUnlockHidden = q.isNotBlank() && searchHidden && locked && !unlocked,
+                results = if (q.isBlank()) emptyList() else apps.asSequence()
                 .filter { (includeHidden || !it.isHidden) && it.app.profile.isVisible }
                 .map { it to Search.score(it.search, q) }
                 .filter { it.second > 0 }
                 .sortedByDescending { it.second } // Stable: equal scores keep alphabetical order.
                 .take(MAX_RESULTS)
                 .map { it.first }
-                .toList())
+                .toList(),
+            )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, SearchState("", emptyList()))
+
+    /** Most-used apps (by recent habit), shown atop the drawer. Empty until there's some history. */
+    val suggestions: StateFlow<List<AppItem>> =
+        combine(allApps, stats.entries, settings.map { it.showSuggestions }.distinctUntilChanged()) { apps, entries, show ->
+            if (!show || entries.isEmpty()) return@combine emptyList()
+            val now = System.currentTimeMillis()
+            apps.asSequence()
+                .filter { !it.isHidden && !it.isPaused && it.app.profile.isVisible && it.profileType != ProfileType.PRIVATE }
+                .map { it to LaunchStats.decayed(entries[it.key], now) }
+                .filter { it.second >= MIN_SUGGESTION_SCORE }
+                .sortedByDescending { it.second }
+                .take(MAX_SUGGESTIONS)
+                .map { it.first }
+                .toList()
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Apps installed in the last few days that haven't been opened yet get a small dot. */
+    val newApps: StateFlow<Set<String>> =
+        combine(allApps, stats.entries) { apps, entries ->
+            val cutoff = System.currentTimeMillis() - NEW_APP_WINDOW_MS
+            apps.filter { it.app.installedAt > cutoff && it.key !in entries }.map { it.key }.toSet()
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val homeEntries: StateFlow<List<HomeEntry>> =
         combine(allApps, snapshot, settings.map { it.favorites }.distinctUntilChanged()) { apps, snap, favorites ->
@@ -167,7 +221,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             return false
         }
         val ok = SystemActions.launchApp(app, item.app, view, bounds)
-        if (!ok) appsRepo.reload()
+        if (ok) stats.recordLaunch(item.key) else appsRepo.reload()
         return ok
     }
 
@@ -341,7 +395,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun reorderHome(orderedIds: List<String>) = settingsRepo.reorderHome(orderedIds)
+
     companion object {
+        private const val MAX_SUGGESTIONS = 5
+        private const val MIN_SUGGESTION_SCORE = 0.9
+        private const val NEW_APP_WINDOW_MS = 3L * 24 * 60 * 60 * 1000
         private const val MAX_RESULTS = 60
         private const val MAX_QUERY = 100
     }

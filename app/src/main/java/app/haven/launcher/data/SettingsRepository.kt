@@ -98,6 +98,13 @@ class SettingsRepository(context: Context) {
         s.copy(favorites = list)
     }
 
+    /** Applies a new home order from drag and drop. Ids not in [orderedIds] keep their relative order at the end. */
+    fun reorderHome(orderedIds: List<String>) = update { s ->
+        val byId = s.favorites.associateBy { it.id }
+        val ordered = orderedIds.mapNotNull { byId[it] }
+        s.copy(favorites = ordered + s.favorites.filterNot { it.id in orderedIds })
+    }
+
     fun setHidden(appKey: String, hidden: Boolean) = update { s ->
         if (hidden) {
             // A hidden app shouldn't keep a home-screen slot either; that would defeat the point.

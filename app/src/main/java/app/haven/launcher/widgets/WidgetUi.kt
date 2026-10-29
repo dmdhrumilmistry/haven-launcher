@@ -132,12 +132,14 @@ private data class WidgetGroup(
 fun WidgetPicker(
     host: HavenWidgetHost,
     apps: List<AppItem>,
+    /** Leave out hidden apps' widgets (when hidden apps are locked). */
+    excludeHidden: Boolean,
     onPick: (AppWidgetProviderInfo) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     var filter by rememberSaveable { mutableStateOf("") }
-    val groups by produceState<List<WidgetGroup>?>(null, apps) {
+    val groups by produceState<List<WidgetGroup>?>(null, apps, excludeHidden) {
         value = withContext(Dispatchers.IO) {
             val pm = context.packageManager
             host.allProviders()
@@ -150,6 +152,7 @@ fun WidgetPicker(
                     }.getOrDefault(first.provider.packageName)
                     WidgetGroup(key, label, app, list.sortedBy { it.loadLabel(pm) })
                 }
+                .filterNot { excludeHidden && it.app?.isHidden == true }
                 .sortedBy { it.label.lowercase() }
         }
     }

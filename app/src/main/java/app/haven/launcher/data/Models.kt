@@ -41,6 +41,8 @@ data class InstalledApp(
     val systemLabel: String,
     val isSystemApp: Boolean,
     val isSuspended: Boolean,
+    /** When the app was first installed, for the "new" dot. */
+    val installedAt: Long,
     val info: LauncherActivityInfo,
 ) {
     val packageName: String get() = component.packageName

@@ -3,6 +3,7 @@ package app.haven.launcher
 import android.app.Application
 import app.haven.launcher.data.AppRepository
 import app.haven.launcher.data.IconCache
+import app.haven.launcher.data.LaunchStats
 import app.haven.launcher.data.SettingsRepository
 import app.haven.launcher.widgets.HavenWidgetHost
 import kotlinx.coroutines.CoroutineScope
@@ -19,12 +20,15 @@ class HavenApp : Application() {
         private set
     lateinit var widgetHost: HavenWidgetHost
         private set
+    lateinit var launchStats: LaunchStats
+        private set
 
     override fun onCreate() {
         super.onCreate()
         settings = SettingsRepository(this)
         icons = IconCache(this)
         apps = AppRepository(this, appScope, icons)
+        launchStats = LaunchStats(this)
         widgetHost = HavenWidgetHost(this)
         widgetHost.deleteOrphans(settings.settings.value.widgets)
     }

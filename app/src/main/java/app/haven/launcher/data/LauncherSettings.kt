@@ -68,6 +68,7 @@ data class LauncherSettings(
     val homeColumns: Int = 4,
     val homePosition: HomePosition = HomePosition.CENTER,
     val showDrawerButton: Boolean = true,
+    val lockHomeLayout: Boolean = false,
     val favorites: List<HomeItem> = emptyList(),
     val favoritesSeeded: Boolean = false,
     val widgets: List<HomeWidget> = emptyList(),
@@ -81,6 +82,7 @@ data class LauncherSettings(
     val iconShape: IconShape = IconShape.SYSTEM,
     val themedIcons: Boolean = false,
     val separateProfileTabs: Boolean = true,
+    val showSuggestions: Boolean = true,
 
     // Search
     // Off: opening the drawer to browse shouldn't throw a keyboard over half the apps.
@@ -89,6 +91,8 @@ data class LauncherSettings(
     val autoLaunchSingleResult: Boolean = false,
     val showWebSearch: Boolean = true,
     val searchHiddenApps: Boolean = false,
+    /** Hidden apps need the device's fingerprint/face/PIN before they can be seen. */
+    val lockHiddenApps: Boolean = false,
 
     // Gestures
     val swipeDownAction: SwipeDownAction = SwipeDownAction.NOTIFICATIONS,
@@ -118,6 +122,9 @@ data class LauncherSettings(
         put("homeColumns", homeColumns)
         put("homePosition", homePosition.name)
         put("showDrawerButton", showDrawerButton)
+        put("lockHomeLayout", lockHomeLayout)
+        put("showSuggestions", showSuggestions)
+        put("lockHiddenApps", lockHiddenApps)
         put("favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
         put("favoritesSeeded", favoritesSeeded)
         put("widgets", JSONArray().apply { widgets.forEach { put(JSONObject().put("id", it.id).put("rows", it.rows)) } })
@@ -168,6 +175,9 @@ data class LauncherSettings(
                 homeColumns = json.optInt("homeColumns", d.homeColumns).coerceIn(3, 6),
                 homePosition = json.enum("homePosition", d.homePosition),
                 showDrawerButton = json.optBoolean("showDrawerButton", d.showDrawerButton),
+                lockHomeLayout = json.optBoolean("lockHomeLayout", d.lockHomeLayout),
+                showSuggestions = json.optBoolean("showSuggestions", d.showSuggestions),
+                lockHiddenApps = json.optBoolean("lockHiddenApps", d.lockHiddenApps),
                 favorites = json.optJSONArray("favorites")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::homeItemFromJson) }
                 }?.distinctBy { it.id } ?: d.favorites,

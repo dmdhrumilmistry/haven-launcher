@@ -80,7 +80,9 @@ import app.haven.launcher.data.SwipeDownAction
 import app.haven.launcher.data.TextColorMode
 import app.haven.launcher.data.ThemeMode
 import app.haven.launcher.haven
+import app.haven.launcher.system.DeviceAuth
 import app.haven.launcher.system.LauncherAccessibilityService
+import app.haven.launcher.system.findComponentActivity
 import app.haven.launcher.system.SystemActions
 import app.haven.launcher.ui.LauncherViewModel
 import app.haven.launcher.ui.components.AppIcon
@@ -134,6 +136,10 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
         }
     }
     BackHandler(onBack = goBack)
+    // Leaving the app relocks hidden apps: coming back shouldn't show them without asking again.
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (page == Page.HIDDEN_APPS && settings.lockHiddenApps) page = Page.MAIN
+    }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     Scaffold(
@@ -179,6 +185,10 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
     val scope = rememberCoroutineScope()
     // Configuration-aware, unlike context.resources, so strings follow language changes.
     val resources = LocalResources.current
+    fun authenticate(titleRes: Int, onSuccess: () -> Unit) {
+        val activity = context.findComponentActivity() ?: return
+        DeviceAuth.authenticate(activity, resources.getString(titleRes), null, onSuccess)
+    }
     val isDefault by vm.isDefaultLauncher.collectAsStateWithLifecycle()
     var lockServiceOn by remember { mutableStateOf(LauncherAccessibilityService.isEnabled(context)) }
     var showLockDisclosure by remember { mutableStateOf(false) }
@@ -333,6 +343,14 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 summary = stringResource(R.string.setting_drawer_button_summary),
             )
         }
+        item {
+            SwitchRow(
+                stringResource(R.string.setting_lock_layout),
+                s.lockHomeLayout,
+                { v -> repo.update { it.copy(lockHomeLayout = v) } },
+                summary = stringResource(R.string.setting_lock_layout_summary),
+            )
+        }
 
         // ---- App drawer ----
         item { SectionHeader(stringResource(R.string.section_drawer)) }
@@ -404,10 +422,40 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
             )
         }
         item {
+            SwitchRow(
+                stringResource(R.string.setting_suggestions),
+                s.showSuggestions,
+                { v ->
+                    repo.update { it.copy(showSuggestions = v) }
+                    // Turning it off also forgets the history, so nothing lingers.
+                    if (!v) context.haven.launchStats.clear()
+                },
+                summary = stringResource(R.string.setting_suggestions_summary),
+            )
+        }
+        item {
             ClickRow(
                 stringResource(R.string.settings_hidden_apps),
                 if (hiddenCount == 0) stringResource(R.string.hidden_none) else pluralString(R.plurals.hidden_count, hiddenCount),
-            ) { onOpenPage(Page.HIDDEN_APPS) }
+            ) {
+                if (s.lockHiddenApps) authenticate(R.string.auth_hidden_title) { onOpenPage(Page.HIDDEN_APPS) }
+                else onOpenPage(Page.HIDDEN_APPS)
+            }
+        }
+        item {
+            val secure = remember { DeviceAuth.isAvailable(context) }
+            SwitchRow(
+                stringResource(R.string.setting_lock_hidden),
+                s.lockHiddenApps,
+                { v ->
+                    // Both directions need the screen lock: on proves the lock works, off must be you.
+                    authenticate(if (v) R.string.auth_enable_lock else R.string.auth_disable_lock) {
+                        repo.update { it.copy(lockHiddenApps = v) }
+                    }
+                },
+                summary = stringResource(if (secure) R.string.setting_lock_hidden_summary else R.string.setting_lock_hidden_no_lock),
+                enabled = secure || s.lockHiddenApps,
+            )
         }
 
         // ---- Search ----

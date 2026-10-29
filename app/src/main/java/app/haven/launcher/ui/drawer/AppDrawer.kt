@@ -1,6 +1,18 @@
 package app.haven.launcher.ui.drawer
 
 import android.graphics.Rect
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.os.Build
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import app.haven.launcher.ui.SearchState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,7 +118,11 @@ class DrawerCallbacks(
     val onLongPress: (AppItem) -> Unit,
     val onSetQuiet: (Profile, Boolean) -> Unit,
     val onOpenSettings: () -> Unit,
+    val onUnlockHidden: () -> Unit,
 )
+
+/** Recently installed apps that haven't been opened yet; they get a small dot. */
+val LocalNewApps = compositionLocalOf { emptySet<String>() }
 
 @Composable
 fun AppDrawer(
@@ -115,11 +131,14 @@ fun AppDrawer(
     loaded: Boolean,
     selectedTab: DrawerTab,
     query: String,
-    results: List<AppItem>,
+    search: SearchState,
+    suggestions: List<AppItem>,
+    newApps: Set<String>,
     searchFocus: FocusRequester,
     callbacks: DrawerCallbacks,
     modifier: Modifier = Modifier,
 ) {
+    val results = search.results
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     // Scrolling the list means the person is browsing, not typing: get the keyboard out of the way.
@@ -155,10 +174,13 @@ fun AppDrawer(
                 .fillMaxWidth()
                 .nestedScroll(hideKeyboardOnScroll),
         ) {
-            when {
-                query.isNotBlank() -> SearchResults(query, results, settings, callbacks)
-                !loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                else -> TabContent(tab, model, settings, callbacks)
+            CompositionLocalProvider(LocalNewApps provides newApps) {
+                when {
+                    query.isNotBlank() -> SearchResults(query, search, settings, callbacks)
+                    !loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    model.tabs.size > 1 -> ProfilePager(tab, model, settings, suggestions, callbacks)
+                    else -> TabContent(tab, model, settings, suggestions, callbacks)
+                }
             }
         }
         if (settings.searchBarAtBottom) {
@@ -252,8 +274,41 @@ private fun ProfileTabs(tabs: List<DrawerTab>, selected: DrawerTab, onSelect: (D
     }
 }
 
+/** Personal / Work / Private side by side: swipe between them, or tap the tabs above. */
 @Composable
-private fun TabContent(tab: DrawerTab, model: DrawerModel, settings: LauncherSettings, cb: DrawerCallbacks) {
+private fun ProfilePager(
+    tab: DrawerTab,
+    model: DrawerModel,
+    settings: LauncherSettings,
+    suggestions: List<AppItem>,
+    cb: DrawerCallbacks,
+) {
+    val tabs = model.tabs
+    val pager = rememberPagerState(initialPage = tabs.indexOf(tab).coerceAtLeast(0)) { tabs.size }
+    // Tab tapped: follow it.
+    LaunchedEffect(tab, tabs) {
+        val index = tabs.indexOf(tab)
+        if (index >= 0 && index != pager.currentPage) pager.animateScrollToPage(index)
+    }
+    // Swiped: tell the tabs.
+    val currentTabs by rememberUpdatedState(tabs)
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect { page -> currentTabs.getOrNull(page)?.let(cb.onSelectTab) }
+    }
+    HorizontalPager(state = pager, key = { tabs.getOrElse(it) { DrawerTab.PERSONAL } }, beyondViewportPageCount = 1) { page ->
+        val pageTab = tabs.getOrElse(page) { DrawerTab.PERSONAL }
+        TabContent(pageTab, model, settings, suggestions, cb)
+    }
+}
+
+@Composable
+private fun TabContent(
+    tab: DrawerTab,
+    model: DrawerModel,
+    settings: LauncherSettings,
+    suggestions: List<AppItem>,
+    cb: DrawerCallbacks,
+) {
     val profile = model.profileByTab[tab]
     val apps = model.appsByTab[tab].orEmpty()
 
@@ -301,6 +356,10 @@ private fun TabContent(tab: DrawerTab, model: DrawerModel, settings: LauncherSet
             }
         }
 
+        if (tab == DrawerTab.PERSONAL && suggestions.isNotEmpty() && apps.isNotEmpty()) {
+            SuggestionsRow(suggestions, settings, cb)
+        }
+
         Box(Modifier.weight(1f)) {
             if (apps.isEmpty()) {
                 StateMessage(
@@ -322,6 +381,23 @@ private fun TabContent(tab: DrawerTab, model: DrawerModel, settings: LauncherSet
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text(stringResource(R.string.action_pause_work)) }
         }
+    }
+}
+
+/** Your most-used apps, one tap away, like the suggestions row in stock Android. */
+@Composable
+private fun SuggestionsRow(suggestions: List<AppItem>, settings: LauncherSettings, cb: DrawerCallbacks) {
+    Column(Modifier.padding(top = 4.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            suggestions.forEach { item ->
+                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    AppCell(item, settings.copy(showGridLabels = true), cb)
+                }
+            }
+            // Keep cells the same width as a full row even with fewer suggestions.
+            repeat(5 - suggestions.size) { Spacer(Modifier.weight(1f)) }
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
     }
 }
 
@@ -425,6 +501,7 @@ fun AppRow(item: AppItem, settings: LauncherSettings, showProfileTag: Boolean, h
             AppIcon(item, (settings.iconSize.dp - 8).dp)
             Spacer(Modifier.width(16.dp))
         }
+        if (item.key in LocalNewApps.current) NewDot()
         Text(
             item.label,
             Modifier.weight(1f, fill = false),
@@ -468,25 +545,40 @@ private fun AppCell(item: AppItem, settings: LauncherSettings, cb: DrawerCallbac
         AppIcon(item, settings.iconSize.dp.dp)
         if (settings.showGridLabels) {
             Spacer(Modifier.height(6.dp))
-            Text(
-                item.label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused) 0.5f else 1f),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (item.key in LocalNewApps.current) NewDot()
+                Text(
+                    item.label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused) 0.5f else 1f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SearchResults(query: String, results: List<AppItem>, settings: LauncherSettings, cb: DrawerCallbacks) {
+private fun SearchResults(query: String, search: SearchState, settings: LauncherSettings, cb: DrawerCallbacks) {
+    val results = search.results
     val context = LocalContext.current
+    val copiedLabel = stringResource(R.string.copied)
     val canWeb = remember { SystemActions.canWebSearch(context) || SystemActions.canResolve(context, browserProbe) }
     val canStore = remember { SystemActions.canStoreSearch(context) }
     LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-        if (results.isEmpty()) {
+        search.calculation?.let { answer ->
+            item(key = "calc") {
+                CalculatorRow(answer) {
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard?.setPrimaryClip(ClipData.newPlainText(answer, answer))
+                    // Android 13+ shows its own "copied" confirmation.
+                    if (Build.VERSION.SDK_INT < 33) SystemActions.toast(context, copiedLabel)
+                }
+            }
+        }
+        if (results.isEmpty() && search.calculation == null) {
             item(key = "empty") {
                 Text(
                     stringResource(R.string.search_no_results, query.trim()),
@@ -499,6 +591,11 @@ private fun SearchResults(query: String, results: List<AppItem>, settings: Launc
         itemsIndexed(results, key = { _, it -> it.key }) { index, item ->
             // The first result is what Enter will open, so show that.
             AppRow(item, settings, showProfileTag = true, highlighted = index == 0, cb = cb)
+        }
+        if (search.canUnlockHidden) {
+            item(key = "unlock") {
+                SearchAction(stringResource(R.string.search_unlock_hidden), Icons.Outlined.Lock, cb.onUnlockHidden)
+            }
         }
         if (settings.showWebSearch) {
             if (canWeb) {
@@ -522,7 +619,43 @@ private fun SearchResults(query: String, results: List<AppItem>, settings: Launc
 private val browserProbe = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com"))
 
 @Composable
-private fun SearchAction(label: String, onClick: () -> Unit) {
+private fun CalculatorRow(answer: String, onCopy: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f))
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.action_copy), onClick = onCopy)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "= $answer",
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(stringResource(R.string.action_copy), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun NewDot() {
+    Box(
+        Modifier
+            .padding(end = 4.dp)
+            .size(6.dp)
+            .background(MaterialTheme.colorScheme.primary, CircleShape),
+    )
+}
+
+@Composable
+private fun SearchAction(label: String, onClick: () -> Unit) = SearchAction(label, Icons.Filled.Search, onClick)
+
+@Composable
+private fun SearchAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -532,7 +665,7 @@ private fun SearchAction(label: String, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(16.dp))
         Text(label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

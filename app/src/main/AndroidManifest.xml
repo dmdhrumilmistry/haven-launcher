@@ -45,6 +45,13 @@
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
         </intent>
+        <!-- Phone makers' own app-cloning screens, for "Clone app". -->
+        <intent>
+            <action android:name="android.settings.MANAGE_CLONED_APPS_SETTINGS" />
+        </intent>
+        <package android:name="com.android.settings" />
+        <package android:name="com.samsung.android.da.daagent" />
+        <package android:name="com.miui.securitycore" />
         <!-- Apps that only offer widgets (no launcher icon) must still show up in the widget picker. -->
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

@@ -90,6 +90,23 @@
     <string name="error_widget">Couldn\'t add this widget</string>
     <string name="setting_home_columns">Columns</string>
 
+    <!-- Hidden app lock, suggestions, calculator, cloning, layout lock -->
+    <string name="auth_hidden_title">Unlock hidden apps</string>
+    <string name="auth_enable_lock">Confirm it\'s you to lock hidden apps</string>
+    <string name="auth_disable_lock">Confirm it\'s you to unlock hidden apps</string>
+    <string name="setting_lock_hidden">Lock hidden apps</string>
+    <string name="setting_lock_hidden_summary">Use your fingerprint, face or screen lock to see hidden apps</string>
+    <string name="setting_lock_hidden_no_lock">Set a screen lock on your phone first</string>
+    <string name="search_unlock_hidden">Unlock to include hidden apps</string>
+    <string name="setting_suggestions">Suggested apps</string>
+    <string name="setting_suggestions_summary">Your most-used apps atop the app list. Learned only on this phone; turning it off erases the history.</string>
+    <string name="setting_lock_layout">Lock home screen layout</string>
+    <string name="setting_lock_layout_summary">Prevent moving apps and changing widgets by accident</string>
+    <string name="home_layout_locked">Home screen layout is locked. Unlock it in Haven settings.</string>
+    <string name="action_clone">Clone app</string>
+    <string name="action_copy">Copy</string>
+    <string name="copied">Copied</string>
+
     <!-- Rename -->
     <string name="rename_title">Rename app</string>
     <string name="rename_original">Original name: %1$s</string>
@@ -124,7 +141,7 @@
     <string name="settings_home_apps">Home apps</string>
     <string name="settings_add_home_apps">Add apps</string>
     <string name="settings_hidden_apps">Hidden apps</string>
-    <string name="home_apps_hint">Reorder or remove what\'s on your home screen.</string>
+    <string name="home_apps_hint">Reorder or remove what\'s on your home screen. You can also long-press and drag apps on the home screen itself.</string>
     <string name="unavailable_app">Unavailable app</string>
     <string name="unavailable_summary">Not installed or currently unavailable</string>
     <string name="shortcut_label">Shortcut</string>
