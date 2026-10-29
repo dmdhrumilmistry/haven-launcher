@@ -20,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import androidx.core.os.ConfigurationCompat
 import app.haven.launcher.data.ClockFormat
 import java.util.Date
 import java.util.Locale
@@ -80,7 +79,8 @@ data class ClockText(val time: String, val date: String, val alarm: String?)
 @Composable
 fun formatClock(now: Long, alarm: Long?, format: ClockFormat): ClockText {
     val context = LocalContext.current
-    val locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.getDefault()
+    // From the configuration, so the clock re-formats as soon as the language changes.
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val use24 = when (format) {
         ClockFormat.SYSTEM -> DateFormat.is24HourFormat(context)
         ClockFormat.H12 -> false
