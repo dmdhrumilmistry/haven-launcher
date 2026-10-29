@@ -8,8 +8,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -92,6 +92,8 @@ fun HomeScreen(
     contentColor: Color,
     callbacks: HomeCallbacks,
     modifier: Modifier = Modifier,
+    /** Widgets, if any. Gets a modifier that bounds its height so app icons always stay visible. */
+    widgetContent: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val cb by rememberUpdatedState(callbacks)
@@ -168,12 +170,23 @@ fun HomeScreen(
             Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
-                .padding(horizontal = 28.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = horizontal,
         ) {
             if (settings.showClock || settings.showDate) {
                 Spacer(Modifier.height(32.dp))
                 ClockBlock(settings, contentColor, shadow, textAlign, horizontal)
+            }
+
+            if (widgetContent != null) {
+                Spacer(Modifier.height(20.dp))
+                // Takes what it needs, up to about half the free space; scrolls beyond that.
+                widgetContent(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                )
             }
 
             // Favorites take the remaining space, centred or anchored low for one-handed reach.
@@ -196,12 +209,28 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else when (settings.homeStyle) {
-                    HomeStyle.DOCK -> FlowRow(
-                        favoritesModifier,
-                        horizontalArrangement = Arrangement.spacedBy(20.dp, horizontal),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
-                    ) {
-                        entries.forEach { entry -> DockItem(entry, settings, contentColor, shadow, cb) }
+                    // Stock-Android style: equal columns across the full width.
+                    HomeStyle.DOCK -> BoxWithConstraints(favoritesModifier) {
+                        // Stock-Android style: equal columns across the full width. A short last row
+                        // keeps the same cell size, aligned per the alignment setting.
+                        val columns = settings.homeColumns.coerceIn(3, 6)
+                        val cell = maxWidth / columns
+                        val arrangement = when (settings.homeAlignment) {
+                            HomeAlignment.START -> Arrangement.Start
+                            HomeAlignment.CENTER -> Arrangement.Center
+                            HomeAlignment.END -> Arrangement.End
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            entries.chunked(columns).forEach { row ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = arrangement) {
+                                    row.forEach { entry ->
+                                        Box(Modifier.width(cell), contentAlignment = Alignment.TopCenter) {
+                                            DockItem(entry, settings, contentColor, shadow, cb)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     else -> Column(favoritesModifier, horizontalAlignment = horizontal) {
                         entries.forEach { entry -> ListItem(entry, settings, contentColor, shadow, cb) }
@@ -334,7 +363,8 @@ private fun DockItem(entry: HomeEntry, settings: LauncherSettings, color: Color,
     val moreLabel = stringResource(R.string.more_options)
     Column(
         Modifier
-            .width(settings.iconSize.dp.dp + 20.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
             .clip(RoundedCornerShape(16.dp))
             .combinedClickable(
                 role = Role.Button,

@@ -4,6 +4,7 @@ import android.app.Application
 import app.haven.launcher.data.AppRepository
 import app.haven.launcher.data.IconCache
 import app.haven.launcher.data.SettingsRepository
+import app.haven.launcher.widgets.HavenWidgetHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
@@ -16,12 +17,16 @@ class HavenApp : Application() {
         private set
     lateinit var apps: AppRepository
         private set
+    lateinit var widgetHost: HavenWidgetHost
+        private set
 
     override fun onCreate() {
         super.onCreate()
         settings = SettingsRepository(this)
         icons = IconCache(this)
         apps = AppRepository(this, appScope, icons)
+        widgetHost = HavenWidgetHost(this)
+        widgetHost.deleteOrphans(settings.settings.value.widgets)
     }
 
     override fun onTrimMemory(level: Int) {

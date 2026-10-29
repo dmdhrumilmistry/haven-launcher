@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
@@ -75,6 +76,12 @@ import app.haven.launcher.ui.home.HomeScreen
 import app.haven.launcher.ui.home.rememberWallpaperPrefersDarkText
 import app.haven.launcher.ui.theme.HavenTheme
 import app.haven.launcher.ui.theme.isDarkTheme
+import app.haven.launcher.data.HomeWidget
+import app.haven.launcher.haven
+import app.haven.launcher.widgets.HomeWidgetStack
+import app.haven.launcher.widgets.HomeWidgets
+import app.haven.launcher.widgets.WidgetActionsSheet
+import app.haven.launcher.widgets.WidgetPicker
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
@@ -82,7 +89,7 @@ private const val VELOCITY_THRESHOLD = 1200f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LauncherScreen(vm: LauncherViewModel) {
+fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val snapshot by vm.snapshot.collectAsStateWithLifecycle()
     val drawerModel by vm.drawer.collectAsStateWithLifecycle()
@@ -110,6 +117,8 @@ fun LauncherScreen(vm: LauncherViewModel) {
     var sheetShortcut by remember { mutableStateOf<HomeEntry.Shortcut?>(null) }
     var renameApp by remember { mutableStateOf<AppItem?>(null) }
     var homeMenu by remember { mutableStateOf(false) }
+    var widgetPicker by remember { mutableStateOf(false) }
+    var sheetWidget by remember { mutableStateOf<HomeWidget?>(null) }
 
     // Undispatched so consecutive drag events always build on the latest value.
     fun snap(value: Float) {
@@ -159,6 +168,7 @@ fun LauncherScreen(vm: LauncherViewModel) {
         sheetShortcut = null
         renameApp = null
         homeMenu = false
+        sheetWidget = null
         resetDrawer(animate = false)
     }
     LaunchedEffect(Unit) {
@@ -167,6 +177,7 @@ fun LauncherScreen(vm: LauncherViewModel) {
             sheetShortcut = null
             renameApp = null
             homeMenu = false
+            sheetWidget = null
             resetDrawer(animate = true)
         }
     }
@@ -309,6 +320,15 @@ fun LauncherScreen(vm: LauncherViewModel) {
                         entries = homeEntries,
                         contentColor = homeColor,
                         callbacks = homeCallbacks,
+                        widgetContent = if (settings.widgets.isEmpty()) null else { widgetModifier ->
+                            HomeWidgetStack(
+                                widgets = settings.widgets,
+                                controller = widgets,
+                                onLongPress = { sheetWidget = it },
+                                contentColor = homeColor,
+                                modifier = widgetModifier,
+                            )
+                        },
                         modifier = Modifier.graphicsLayer {
                             val p = progress.value
                             alpha = 1f - p
@@ -406,6 +426,10 @@ fun LauncherScreen(vm: LauncherViewModel) {
 
             if (homeMenu) {
                 ModalBottomSheet(onDismissRequest = { homeMenu = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+                    ActionRow(Icons.Filled.Add, stringResource(R.string.action_widgets)) {
+                        homeMenu = false
+                        widgetPicker = true
+                    }
                     ActionRow(Icons.Filled.Home, stringResource(R.string.action_wallpaper)) {
                         homeMenu = false
                         SystemActions.pickWallpaper(context)
@@ -421,6 +445,37 @@ fun LauncherScreen(vm: LauncherViewModel) {
                         homeMenu = false
                         SystemActions.openLauncherSettings(context)
                     }
+                }
+            }
+
+            if (widgetPicker) {
+                WidgetPicker(
+                    host = widgets.host,
+                    apps = allApps,
+                    onPick = { info ->
+                        widgetPicker = false
+                        widgets.add(info)
+                    },
+                    onDismiss = { widgetPicker = false },
+                )
+            }
+
+            sheetWidget?.let { widget ->
+                val index = settings.widgets.indexOfFirst { it.id == widget.id }
+                val live = settings.widgets.getOrNull(index)
+                if (live != null) {
+                    WidgetActionsSheet(
+                        widget = live,
+                        info = remember(live.id) { widgets.host.infoFor(live.id) },
+                        position = index,
+                        count = settings.widgets.size,
+                        canReconfigure = remember(live.id) { widgets.canReconfigure(live.id) },
+                        onResize = { rows -> context.haven.settings.resizeWidget(live.id, rows) },
+                        onMove = { delta -> context.haven.settings.moveWidget(live.id, delta) },
+                        onReconfigure = { widgets.reconfigure(live.id) },
+                        onRemove = { widgets.remove(live.id) },
+                        onDismiss = { sheetWidget = null },
+                    )
                 }
             }
 

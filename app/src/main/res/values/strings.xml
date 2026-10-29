@@ -72,6 +72,24 @@
     <string name="action_lock_screen">Lock screen</string>
     <string name="action_nothing">Do nothing</string>
 
+    <!-- Widgets -->
+    <string name="action_widgets">Widgets</string>
+    <string name="widgets_title">Widgets</string>
+    <string name="widgets_search">Search widgets</string>
+    <string name="widgets_empty">No widgets found</string>
+    <string name="widget_size">%1$d × %2$d</string>
+    <string name="widget_taller">Make taller</string>
+    <string name="widget_shorter">Make shorter</string>
+    <string name="widget_move_up">Move up</string>
+    <string name="widget_move_down">Move down</string>
+    <string name="widget_settings">Widget settings</string>
+    <string name="widget_remove">Remove widget</string>
+    <string name="widget_unavailable">This widget isn\'t available anymore. Tap to remove it.</string>
+    <string name="widget_unavailable_title">Unavailable widget</string>
+    <string name="add_widget_title">Add widget to home screen?</string>
+    <string name="error_widget">Couldn\'t add this widget</string>
+    <string name="setting_home_columns">Columns</string>
+
     <!-- Rename -->
     <string name="rename_title">Rename app</string>
     <string name="rename_original">Original name: %1$s</string>
@@ -170,7 +188,7 @@
     <string name="gesture_swipe_down">Swipe down</string>
     <string name="gesture_double_tap">Double-tap</string>
     <string name="gesture_long_press">Long-press empty space</string>
-    <string name="gesture_long_press_value">Wallpaper, home apps and settings</string>
+    <string name="gesture_long_press_value">Widgets, wallpaper, home apps and settings</string>
     <string name="lock_setup_needed">Finish setting up double-tap to lock</string>
     <string name="lock_setup_needed_summary">Needs Haven\'s screen lock service to be turned on</string>
 
@@ -200,7 +218,7 @@
     <string name="backup_invalid">That file isn\'t a Haven backup</string>
     <string name="reset_all">Reset all settings</string>
     <string name="reset_all_summary">Back to defaults. Your apps aren\'t affected.</string>
-    <string name="reset_all_confirm">This clears your home apps, hidden apps, custom names and preferences. Installed apps aren\'t affected.</string>
+    <string name="reset_all_confirm">This clears your home apps, hidden apps, custom names and preferences. Widgets and installed apps aren\'t affected.</string>
 
     <string name="about_privacy">Private by design</string>
     <string name="about_privacy_summary">No ads, no tracking, no accounts. Haven has no internet permission, so nothing ever leaves your phone.</string>

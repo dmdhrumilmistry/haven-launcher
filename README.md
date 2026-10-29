@@ -8,14 +8,15 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 
 **Home screen**
 - Clock and date (tap the clock for alarms, tap the date for the calendar), plus your next alarm if it's within 18 hours
-- Favorite apps as names, icons with names, or an icon grid. Align left, center or right; place them in the middle or at the bottom (easier to reach)
+- **Widgets**: long-press empty space > Widgets. Long-press a widget to resize, reorder, reconfigure or remove it. Apps can also add widgets and shortcuts to the home screen themselves
+- Favorite apps as a stock-Android style icon grid (default, 3 to 6 columns), names only, or icons with names. Align left, center or right; place them in the middle or at the bottom (easier to reach)
 - On first run it adds your default phone, messages, browser and camera, so the home screen isn't empty
 - Text color follows the wallpaper automatically (light or dark), with an optional wallpaper dim
 - Supports pinned shortcuts from other apps (for example, a browser's "Add to home screen")
 
 **App drawer**
 - Swipe up anywhere (or tap the arrow) to open. The drawer follows your finger and settles with a spring
-- Search opens with the keyboard ready. It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
+- Search (the keyboard can open automatically; off by default). It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
 - Enter opens the top result. Optional "open when only one app matches", which never fires while you're deleting
 - If nothing matches: search the web or the app store
 - List or grid, A-Z fast scroller (localized with ICU, so it works for Japanese, Chinese, etc.)

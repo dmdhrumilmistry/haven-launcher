@@ -264,6 +264,16 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 { v -> repo.update { it.copy(homeStyle = v) } },
             )
         }
+        if (s.homeStyle == HomeStyle.DOCK) {
+            item {
+                ChoiceRow(
+                    stringResource(R.string.setting_home_columns),
+                    (3..6).map { it to it.toString() },
+                    s.homeColumns,
+                    { v -> repo.update { it.copy(homeColumns = v) } },
+                )
+            }
+        }
         item {
             ChoiceRow(
                 stringResource(R.string.setting_alignment),
