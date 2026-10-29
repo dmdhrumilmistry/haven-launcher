@@ -41,6 +41,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -92,6 +93,8 @@ fun LauncherScreen(vm: LauncherViewModel) {
 
     val context = LocalContext.current
     val view = LocalView.current
+    // Configuration-aware, unlike context.resources, so strings follow language changes.
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -360,7 +363,7 @@ fun LauncherScreen(vm: LauncherViewModel) {
                     },
                     onPinShortcut = { info ->
                         vm.pinShortcutToHome(info)
-                        SystemActions.toast(context, context.getString(R.string.added_to_home))
+                        SystemActions.toast(context, resources.getString(R.string.added_to_home))
                     },
                     onToggleFavorite = {
                         vm.toggleFavorite(live)
@@ -372,7 +375,7 @@ fun LauncherScreen(vm: LauncherViewModel) {
                     },
                     onToggleHidden = {
                         vm.setHidden(live, !live.isHidden)
-                        if (!live.isHidden) SystemActions.toast(context, context.getString(R.string.hidden_toast, live.label))
+                        if (!live.isHidden) SystemActions.toast(context, resources.getString(R.string.hidden_toast, live.label))
                         sheetApp = null
                     },
                     onDismiss = { sheetApp = null },

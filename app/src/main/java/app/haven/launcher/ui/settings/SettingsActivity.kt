@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -176,6 +177,8 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
     val context = LocalContext.current
     val repo = context.haven.settings
     val scope = rememberCoroutineScope()
+    // Configuration-aware, unlike context.resources, so strings follow language changes.
+    val resources = LocalResources.current
     val isDefault by vm.isDefaultLauncher.collectAsStateWithLifecycle()
     var lockServiceOn by remember { mutableStateOf(LauncherAccessibilityService.isEnabled(context)) }
     var showLockDisclosure by remember { mutableStateOf(false) }
@@ -194,7 +197,7 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                     context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(repo.exportJson().toByteArray()) }
                 }.isSuccess
             }
-            SystemActions.toast(context, context.getString(if (ok) R.string.backup_saved else R.string.backup_failed))
+            SystemActions.toast(context, resources.getString(if (ok) R.string.backup_saved else R.string.backup_failed))
         }
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -210,7 +213,7 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 }.getOrNull()
             }
             val ok = text != null && repo.importJson(text)
-            SystemActions.toast(context, context.getString(if (ok) R.string.backup_restored else R.string.backup_invalid))
+            SystemActions.toast(context, resources.getString(if (ok) R.string.backup_restored else R.string.backup_invalid))
         }
     }
 
@@ -594,7 +597,7 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
 
 @Composable
 private fun pluralString(id: Int, count: Int): String =
-    LocalContext.current.resources.getQuantityString(id, count, count)
+    LocalResources.current.getQuantityString(id, count, count)
 
 private const val MAX_BACKUP_BYTES = 1_000_000
 
