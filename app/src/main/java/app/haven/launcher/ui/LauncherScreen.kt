@@ -67,6 +67,8 @@ import app.haven.launcher.ui.components.ActionRow
 import app.haven.launcher.ui.components.AppActionsSheet
 import app.haven.launcher.ui.components.IconPrefs
 import app.haven.launcher.ui.components.LocalIconPrefs
+import app.haven.launcher.ui.components.CategoryPickerDialog
+import app.haven.launcher.ui.components.FolderDialog
 import app.haven.launcher.ui.components.LocalPausedApps
 import app.haven.launcher.focus.AppPausedDialog
 import app.haven.launcher.focus.PauseChooserDialog
@@ -110,9 +112,14 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val hiddenUnlocked by vm.hiddenUnlocked.collectAsStateWithLifecycle()
     val pauses by vm.pauses.collectAsStateWithLifecycle()
     var pauseTarget by remember { mutableStateOf<AppItem?>(null) }
+    // Open folder (home or drawer), and the folder an app menu was opened from.
+    var openFolder by remember { mutableStateOf<FolderRef?>(null) }
+    var sheetFolder by remember { mutableStateOf<FolderRef?>(null) }
+    var categoriesFor by remember { mutableStateOf<AppItem?>(null) }
 
     val context = LocalContext.current
     val view = LocalView.current
+    val repo = context.haven.settings
     // Configuration-aware, unlike context.resources, so strings follow language changes.
     val resources = LocalResources.current
     val scope = rememberCoroutineScope()
@@ -179,6 +186,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
         // Hidden apps relock as soon as the home screen leaves view.
         vm.setHiddenUnlocked(false)
         pauseTarget = null
+        openFolder = null
+        categoriesFor = null
         sheetApp = null
         sheetShortcut = null
         renameApp = null
@@ -275,12 +284,17 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 when (entry) {
                     is HomeEntry.App -> vm.launch(entry.item, view, bounds)
                     is HomeEntry.Shortcut -> vm.launch(entry, view, bounds)
+                    is HomeEntry.Folder -> openFolder = FolderRef(home = true, id = entry.item.folderId)
                 }
             },
             onLongPress = { entry ->
                 when (entry) {
-                    is HomeEntry.App -> sheetApp = entry.item
+                    is HomeEntry.App -> {
+                        sheetFolder = null
+                        sheetApp = entry.item
+                    }
                     is HomeEntry.Shortcut -> sheetShortcut = entry
+                    is HomeEntry.Folder -> openFolder = FolderRef(home = true, id = entry.item.folderId)
                 }
             },
             onOpenDrawer = { openDrawer() },
@@ -306,6 +320,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             onDoubleTap = if (BuildConfig.LOCK_GESTURE && settings.doubleTapAction == DoubleTapAction.LOCK) ({ vm.lockScreen() }) else null,
             onBackgroundLongPress = { homeMenu = true },
             onReorder = vm::reorderHome,
+            onMerge = vm::dropOnHome,
         )
     }
 
@@ -316,10 +331,13 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             onLaunch = { item, bounds -> vm.launch(item, view, bounds) },
             onLongPress = { item ->
                 hideKeyboard()
+                sheetFolder = null
                 sheetApp = item
             },
             onSetQuiet = { profile, quiet -> vm.setQuietMode(profile, quiet) },
             onOpenSettings = { SystemActions.openLauncherSettings(context) },
+            onOpenFolder = { entry -> openFolder = FolderRef(home = false, id = entry.folder.id) },
+            onDropApp = vm::dropInDrawer,
             onUnlockHidden = {
                 context.findComponentActivity()?.let { activity ->
                     DeviceAuth.authenticate(activity, resources.getString(R.string.auth_hidden_title), null) {
@@ -442,6 +460,16 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                             SystemActions.openAppTimer(context, live.app)
                         }
                     } else null,
+                    onRemoveFromFolder = sheetFolder?.let { ref ->
+                        {
+                            sheetApp = null
+                            if (ref.home) repo.removeFromHomeFolder(ref.id, live.key) else repo.removeFromDrawerFolder(ref.id, live.key)
+                        }
+                    },
+                    onCategories = {
+                        sheetApp = null
+                        categoriesFor = live
+                    },
                     onClone = if (live.profileType == ProfileType.PERSONAL && CloneSupport.cloneSettingsIntent(context) != null) {
                         {
                             sheetApp = null
@@ -534,6 +562,44 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 }
             }
 
+            openFolder?.let { ref ->
+                // Live lookup: the folder may change (or dissolve) while open.
+                val content: Pair<String, List<AppItem>>? = if (ref.home) {
+                    homeEntries.filterIsInstance<HomeEntry.Folder>().firstOrNull { it.item.folderId == ref.id }?.let { it.label to it.apps }
+                } else {
+                    drawerModel.entriesByTab.values.flatten().filterIsInstance<DrawerEntry.Folder>()
+                        .firstOrNull { it.folder.id == ref.id }?.let { it.label to it.apps }
+                }
+                if (content == null) {
+                    LaunchedEffect(ref) { openFolder = null }
+                } else {
+                    FolderDialog(
+                        name = content.first,
+                        apps = content.second,
+                        onLaunch = { app ->
+                            openFolder = null
+                            vm.launch(app, view, null)
+                        },
+                        onAppMenu = { app ->
+                            sheetFolder = ref
+                            sheetApp = app
+                        },
+                        onRename = { name -> if (ref.home) repo.renameHomeFolder(ref.id, name) else repo.renameDrawerFolder(ref.id, name) },
+                        onDismiss = { openFolder = null },
+                    )
+                }
+            }
+
+            categoriesFor?.let { app ->
+                CategoryPickerDialog(
+                    app = app,
+                    categories = settings.categories,
+                    onToggle = { id, on -> repo.setAppInCategory(id, app.key, on) },
+                    onCreate = { name -> repo.createCategory(name, setOf(app.key)) },
+                    onDismiss = { categoriesFor = null },
+                )
+            }
+
             pauseTarget?.let { app ->
                 PauseChooserDialog(app, onPause = { until -> vm.pauseApp(app, until) }, onDismiss = { pauseTarget = null })
             }
@@ -542,6 +608,9 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
         }
     }
 }
+
+/** Which folder: on the home screen or in the drawer. */
+data class FolderRef(val home: Boolean, val id: String)
 
 /**
  * "Launch when only one match": fires only while typing forward, never while deleting, so

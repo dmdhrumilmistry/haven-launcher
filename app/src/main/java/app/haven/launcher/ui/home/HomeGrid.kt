@@ -28,6 +28,10 @@ import app.haven.launcher.data.HomeAlignment
 import app.haven.launcher.ui.HomeEntry
 import kotlin.math.ceil
 
+private const val MERGE_RADIUS = 0.28f
+private const val REORDER_DELAY_MS = 250L
+private const val TICK_MS = 80L
+
 /** Where each slot sits, filled in by the layout and read by the drag logic. */
 private class GridMetrics {
     var cellWidth = 0
@@ -63,8 +67,11 @@ fun ReorderableHomeGrid(
     reorderEnabled: Boolean,
     onReorder: (List<String>) -> Unit,
     onMenu: (HomeEntry) -> Unit,
+    /** Dropping [dragged] onto [target] makes or fills a folder. */
+    canMerge: (dragged: HomeEntry, target: HomeEntry) -> Boolean,
+    onMerge: (draggedId: String, targetId: String) -> Unit,
     modifier: Modifier = Modifier,
-    item: @Composable (entry: HomeEntry, gestures: Modifier, dragging: Boolean) -> Unit,
+    item: @Composable (entry: HomeEntry, gestures: Modifier, dragging: Boolean, mergeTarget: Boolean) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val metrics = remember { GridMetrics() }
@@ -73,10 +80,17 @@ fun ReorderableHomeGrid(
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragStartSlot by remember { mutableStateOf(IntOffset.Zero) }
     var dragTotal by remember { mutableStateOf(Offset.Zero) }
+    var mergeTargetId by remember { mutableStateOf<String?>(null) }
     val latestReorder by rememberUpdatedState(onReorder)
     val latestMenu by rememberUpdatedState(onMenu)
+    val latestCanMerge by rememberUpdatedState(canMerge)
+    val latestMerge by rememberUpdatedState(onMerge)
+    // Moving to a new slot only reorders after a short pause there, so you can drag *onto* an app
+    // (to make a folder) without everything shuffling out from under you, like stock Android.
+    // [0] = slot the finger is lingering over (-1 none), [1] = since when. Not state: no redraw needed.
+    val timer = remember { longArrayOf(-1L, 0L) }
 
-    fun moveDraggedToNearestSlot() {
+    fun evaluate(now: Long) {
         val id = draggingId ?: return
         val from = order.indexOfFirst { it.id == id }
         if (from < 0) return
@@ -84,12 +98,32 @@ fun ReorderableHomeGrid(
             dragStartSlot.x + dragTotal.x + metrics.cellWidth / 2f,
             dragStartSlot.y + dragTotal.y + metrics.rowPitch / 2f,
         )
-        val target = order.indices.minByOrNull { i ->
+        val nearest = order.indices.minByOrNull { i ->
             val s = metrics.slot(i)
             (Offset(s.x + metrics.cellWidth / 2f, s.y + metrics.rowPitch / 2f) - center).getDistanceSquared()
         } ?: return
-        if (target != from) {
-            order = order.toMutableList().apply { add(target, removeAt(from)) }
+        val slot = metrics.slot(nearest)
+        val distance = (Offset(slot.x + metrics.cellWidth / 2f, slot.y + metrics.rowPitch / 2f) - center).getDistance()
+        val over = order[nearest]
+        val dragged = order[from]
+        // Close to another item's centre: it's a drop target for a folder.
+        if (nearest != from && distance < metrics.cellWidth * MERGE_RADIUS && latestCanMerge(dragged, over)) {
+            if (mergeTargetId != over.id) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            mergeTargetId = over.id
+            timer[0] = -1
+            return
+        }
+        mergeTargetId = null
+        if (nearest == from) {
+            timer[0] = -1
+            return
+        }
+        if (timer[0] != nearest.toLong()) {
+            timer[0] = nearest.toLong()
+            timer[1] = now
+        } else if (now - timer[1] >= REORDER_DELAY_MS) {
+            order = order.toMutableList().apply { add(nearest, removeAt(from)) }
+            timer[0] = -1
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
@@ -109,7 +143,12 @@ fun ReorderableHomeGrid(
                             var moved = false
                             var travelled = Offset.Zero
                             while (true) {
-                                val event = awaitPointerEvent()
+                                // Wake up regularly even if the finger is still, so a pause over a slot reorders.
+                                val event = withTimeoutOrNull(TICK_MS) { awaitPointerEvent() }
+                                if (event == null) {
+                                    if (moved) evaluate(System.currentTimeMillis())
+                                    continue
+                                }
                                 val change = event.changes.firstOrNull { it.id == press.id } ?: break
                                 // Consuming everything (including the lift) stops the tap from also firing.
                                 val delta = change.positionChange()
@@ -123,12 +162,14 @@ fun ReorderableHomeGrid(
                                     dragTotal = travelled
                                 } else if (moved) {
                                     dragTotal += delta
-                                    moveDraggedToNearestSlot()
+                                    evaluate(System.currentTimeMillis())
                                 }
                             }
                             if (moved) {
-                                latestReorder(order.map { it.id })
+                                val target = mergeTargetId
+                                if (target != null) latestMerge(entry.id, target) else latestReorder(order.map { it.id })
                                 draggingId = null
+                                mergeTargetId = null
                                 dragTotal = Offset.Zero
                             } else {
                                 latestMenu(entry)
@@ -153,7 +194,7 @@ fun ReorderableHomeGrid(
                             HomeAlignment.END -> Alignment.TopEnd
                         },
                     ) {
-                        item(entry, gestures, dragging)
+                        item(entry, gestures, dragging, mergeTargetId == entry.id)
                     }
                 }
             }

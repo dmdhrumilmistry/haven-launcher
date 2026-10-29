@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -65,7 +66,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.haven.launcher.BuildConfig
 import app.haven.launcher.R
+import app.haven.launcher.data.AppCategory
 import app.haven.launcher.data.ClockFormat
+import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.data.ClockSize
 import app.haven.launcher.data.DoubleTapAction
 import app.haven.launcher.data.DrawerLayout
@@ -102,7 +105,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private enum class Page { MAIN, HOME_APPS, ADD_HOME_APPS, HIDDEN_APPS, PAUSES, SCHEDULE }
+private enum class Page { MAIN, HOME_APPS, ADD_HOME_APPS, HIDDEN_APPS, PAUSES, SCHEDULE, CATEGORIES }
 
 class SettingsActivity : ComponentActivity() {
     private val vm: LauncherViewModel by viewModels()
@@ -162,6 +165,7 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                                 Page.HIDDEN_APPS -> R.string.settings_hidden_apps
                                 Page.PAUSES -> R.string.settings_pauses
                                 Page.SCHEDULE -> R.string.schedule_title
+                                Page.CATEGORIES -> R.string.settings_categories
                             },
                         ),
                     )
@@ -181,6 +185,7 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                 Page.HOME_APPS -> HomeAppsPage(vm, settings, onAdd = { page = Page.ADD_HOME_APPS })
                 Page.ADD_HOME_APPS -> AddHomeAppsPage(vm, settings)
                 Page.HIDDEN_APPS -> HiddenAppsPage(vm)
+                Page.CATEGORIES -> CategoriesPage(vm, settings)
                 Page.PAUSES -> {
                     val apps by vm.allApps.collectAsStateWithLifecycle()
                     val repo = LocalContext.current.haven.settings
@@ -467,6 +472,24 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 s.separateProfileTabs,
                 { v -> repo.update { it.copy(separateProfileTabs = v) } },
                 summary = stringResource(R.string.setting_profile_tabs_summary),
+            )
+        }
+        item {
+            ClickRow(
+                stringResource(R.string.settings_categories),
+                if (s.categories.isEmpty()) stringResource(R.string.categories_summary_none)
+                else s.categories.joinToString(", ") { it.name.ifBlank { "…" } },
+            ) { onOpenPage(Page.CATEGORIES) }
+        }
+        item {
+            ChoiceRow(
+                stringResource(R.string.setting_sort),
+                listOf(
+                    DrawerSort.ALPHABETICAL to stringResource(R.string.sort_alphabetical),
+                    DrawerSort.MOST_USED to stringResource(R.string.sort_most_used),
+                ),
+                s.drawerSort,
+                { v -> repo.update { it.copy(drawerSort = v) } },
             )
         }
         item {
@@ -758,10 +781,12 @@ private fun HomeAppsPage(vm: LauncherViewModel, s: LauncherSettings, onAdd: () -
                 val label = when (fav) {
                     is HomeItem.App -> app?.label ?: stringResource(R.string.unavailable_app)
                     is HomeItem.Shortcut -> fav.label.ifBlank { fav.packageName }
+                    is HomeItem.Folder -> fav.name.ifBlank { stringResource(R.string.folder_default) }
                 }
                 val unavailable = when (fav) {
                     is HomeItem.App -> app == null
                     is HomeItem.Shortcut -> homeEntries.none { it.id == fav.id }
+                    is HomeItem.Folder -> homeEntries.none { it.id == fav.id }
                 }
                 Row(
                     Modifier
@@ -778,6 +803,7 @@ private fun HomeAppsPage(vm: LauncherViewModel, s: LauncherSettings, onAdd: () -
                         val sub = when {
                             unavailable -> stringResource(R.string.unavailable_summary)
                             fav is HomeItem.Shortcut -> stringResource(R.string.shortcut_label)
+                            fav is HomeItem.Folder -> pluralString(R.plurals.folder_apps, fav.apps.size)
                             else -> app?.let { profileLabel(it.profileType) }
                         }
                         if (sub != null) {
@@ -890,5 +916,108 @@ private fun HiddenAppsPage(vm: LauncherViewModel) {
                 TextButton(onClick = { vm.setHidden(app, false) }) { Text(stringResource(R.string.action_unhide)) }
             }
         }
+    }
+}
+
+/** Create, rename, reorder and delete categories; or let Haven suggest them from app types. */
+@Composable
+private fun CategoriesPage(vm: LauncherViewModel, s: LauncherSettings) {
+    val context = LocalContext.current
+    val repo = context.haven.settings
+    val resources = LocalResources.current
+    var renaming by remember { mutableStateOf<AppCategory?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<AppCategory?>(null) }
+
+    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+        item {
+            Text(
+                stringResource(R.string.categories_hint),
+                Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        itemsIndexed(s.categories, key = { _, it -> it.id }) { index, c ->
+            val name = c.name.ifBlank { stringResource(R.string.category_default) }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable(role = Role.Button, onClickLabel = stringResource(R.string.action_rename)) { renaming = c },
+                ) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        pluralString(R.plurals.folder_apps, c.apps.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { repo.moveCategory(c.id, -1) }, enabled = index > 0) {
+                    Icon(Icons.Filled.KeyboardArrowUp, stringResource(R.string.action_move_up, name))
+                }
+                IconButton(onClick = { repo.moveCategory(c.id, 1) }, enabled = index < s.categories.lastIndex) {
+                    Icon(Icons.Filled.KeyboardArrowDown, stringResource(R.string.action_move_down, name))
+                }
+                IconButton(onClick = { deleting = c }) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.action_remove_item, name))
+                }
+            }
+        }
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = {
+                    val n = vm.suggestCategories()
+                    SystemActions.toast(
+                        context,
+                        if (n == 0) resources.getString(R.string.categories_suggest_none)
+                        else resources.getQuantityString(R.plurals.categories_suggested, n, n),
+                    )
+                }) { Text(stringResource(R.string.categories_suggest)) }
+                FilledTonalButton(onClick = { creating = true }) { Text(stringResource(R.string.category_new)) }
+            }
+        }
+    }
+
+    if (creating || renaming != null) {
+        var text by remember(renaming) { mutableStateOf(renaming?.name.orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { creating = false; renaming = null },
+            title = { Text(stringResource(if (creating) R.string.category_new else R.string.action_rename)) },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { if (it.length <= 40) text = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = text.isNotBlank(), onClick = {
+                    val target = renaming
+                    if (target != null) repo.renameCategory(target.id, text) else repo.createCategory(text)
+                    creating = false
+                    renaming = null
+                }) { Text(stringResource(R.string.action_save)) }
+            },
+            dismissButton = { TextButton(onClick = { creating = false; renaming = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+    deleting?.let { c ->
+        ConfirmDialog(
+            title = stringResource(R.string.category_delete_title, c.name.ifBlank { stringResource(R.string.category_default) }),
+            message = stringResource(R.string.category_delete_body),
+            confirmLabel = stringResource(R.string.action_delete),
+            onConfirm = { repo.deleteCategory(c.id) },
+            onDismiss = { deleting = null },
+        )
     }
 }

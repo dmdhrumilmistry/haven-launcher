@@ -9,6 +9,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 **Home screen**
 - Clock and date (tap the clock for alarms, tap the date for the calendar), plus your next alarm if it's within 18 hours
 - **Widgets**: long-press empty space > Widgets. Long-press a widget to resize, reorder, reconfigure or remove it. Apps can also add widgets and shortcuts to the home screen themselves
+- **Folders**: drag an app onto another to make a folder (named after the apps' type when they share one, e.g. "Social"); drop more apps onto it. Tap to open, tap the name to rename, long-press an app inside to remove it
 - Long-press and drag apps to rearrange them (or lock the layout to prevent accidents)
 - Favorite apps as a stock-Android style icon grid (default, 3 to 6 columns), names only, or icons with names. Align left, center or right; place them in the middle or at the bottom (easier to reach)
 - On first run it adds your default phone, messages, browser and camera, so the home screen isn't empty
@@ -27,6 +28,9 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Long-press any app: its shortcuts, add to home, rename, hide, app info, uninstall
 
 **Work profile, private space and clones**
+- **Categories**: your own drawer tabs (Social, Games, ...). Add apps from their long-press menu, manage them in Settings, or let Haven suggest them from the app types apps declare
+- **Folders in the drawer** too: drag an app onto another; the apps move into the folder (search still finds them)
+- Sort the drawer A to Z or by most used
 - Separate **Personal / Work / Private** tabs: swipe between them or tap (or merge work into the main list)
 - **Clone app** opens the phone's own cloning screen where one exists (Android 14+ cloned apps, Samsung Dual Messenger, Xiaomi Dual apps, and similar screens found in the phone's Settings app). Android doesn't let third-party launchers create clones themselves; clones show in the drawer with a "Clone" tag
 - Work apps can be paused and resumed from the drawer. Paused apps show greyed out, and tapping one offers to turn work apps back on

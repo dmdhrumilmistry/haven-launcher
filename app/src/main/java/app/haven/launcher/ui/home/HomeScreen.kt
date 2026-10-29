@@ -3,6 +3,7 @@ package app.haven.launcher.ui.home
 import android.graphics.Rect
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -71,6 +72,7 @@ import app.haven.launcher.data.LauncherSettings
 import app.haven.launcher.system.SystemActions
 import app.haven.launcher.ui.HomeEntry
 import app.haven.launcher.ui.components.AppIcon
+import app.haven.launcher.ui.components.FolderIcon
 import app.haven.launcher.ui.components.LocalPausedApps
 import app.haven.launcher.ui.components.ShortcutIcon
 import app.haven.launcher.ui.components.windowRect
@@ -85,6 +87,7 @@ class HomeCallbacks(
     val onDoubleTap: (() -> Unit)?,
     val onBackgroundLongPress: () -> Unit,
     val onReorder: (List<String>) -> Unit,
+    val onMerge: (draggedId: String, targetId: String) -> Unit,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -223,10 +226,20 @@ fun HomeScreen(
                         reorderEnabled = !settings.lockHomeLayout,
                         onReorder = cb.onReorder,
                         onMenu = cb.onLongPress,
+                        // Only apps go into folders (not shortcuts, not folders into folders).
+                        canMerge = { dragged, target ->
+                            dragged is HomeEntry.App && (target is HomeEntry.App || target is HomeEntry.Folder)
+                        },
+                        onMerge = cb.onMerge,
                         modifier = favoritesModifier,
-                    ) { entry, gestures, dragging ->
-                        if (grid) DockItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
-                        else ListItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
+                    ) { entry, gestures, dragging, mergeTarget ->
+                        val highlight = if (mergeTarget) {
+                            Modifier.background(contentColor.copy(alpha = 0.18f), RoundedCornerShape(18.dp))
+                        } else Modifier
+                        Box(highlight) {
+                            if (grid) DockItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
+                            else ListItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
+                        }
                     }
                 }
             }
@@ -306,6 +319,7 @@ private fun ClockBlock(
 private fun HomeEntry.label(): String = when (this) {
     is HomeEntry.App -> item.label
     is HomeEntry.Shortcut -> (info.shortLabel ?: item.label).toString()
+    is HomeEntry.Folder -> label
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -398,6 +412,7 @@ private fun EntryIcon(entry: HomeEntry, size: androidx.compose.ui.unit.Dp) {
     when (entry) {
         is HomeEntry.App -> AppIcon(entry.item, size)
         is HomeEntry.Shortcut -> ShortcutIcon(entry.info, size, Modifier.size(size))
+        is HomeEntry.Folder -> FolderIcon(entry.apps, size)
     }
 }
 

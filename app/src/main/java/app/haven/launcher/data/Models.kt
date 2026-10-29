@@ -43,6 +43,8 @@ data class InstalledApp(
     val isSuspended: Boolean,
     /** When the app was first installed, for the "new" dot. */
     val installedAt: Long,
+    /** The type the app declares to Android (game, social, ...), or -1. For suggested categories. */
+    val appCategory: Int,
     val info: LauncherActivityInfo,
 ) {
     val packageName: String get() = component.packageName

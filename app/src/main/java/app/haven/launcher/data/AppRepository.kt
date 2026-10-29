@@ -141,6 +141,7 @@ class AppRepository(
                     isSystemApp = isSystem,
                     isSuspended = appInfo.flags and ApplicationInfo.FLAG_SUSPENDED != 0,
                     installedAt = info.firstInstallTime,
+                    appCategory = appInfo.category,
                     info = info,
                 )
             }

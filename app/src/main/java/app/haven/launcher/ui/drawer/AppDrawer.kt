@@ -1,6 +1,20 @@
 package app.haven.launcher.ui.drawer
 
 import android.graphics.Rect
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.unit.IntOffset
+import app.haven.launcher.ui.DrawerEntry
+import app.haven.launcher.ui.components.FolderIcon
+import app.haven.launcher.ui.components.LongPressDragCallbacks
+import app.haven.launcher.ui.components.longPressDrag
+import kotlin.math.roundToInt
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
@@ -54,7 +68,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.Tab
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
@@ -120,6 +137,8 @@ class DrawerCallbacks(
     val onSetQuiet: (Profile, Boolean) -> Unit,
     val onOpenSettings: () -> Unit,
     val onUnlockHidden: () -> Unit,
+    val onOpenFolder: (DrawerEntry.Folder) -> Unit,
+    val onDropApp: (AppItem, DrawerEntry) -> Unit,
 )
 
 /** Recently installed apps that haven't been opened yet; they get a small dot. */
@@ -171,7 +190,7 @@ fun AppDrawer(
             SearchField(query, results, settings, searchFocus, callbacks)
         }
         if (query.isBlank() && model.tabs.size > 1) {
-            ProfileTabs(model.tabs, tab, callbacks.onSelectTab)
+            ProfileTabs(model.tabs, tab, model.categoryNames, callbacks.onSelectTab)
         }
         Box(
             Modifier
@@ -250,32 +269,48 @@ private fun SearchField(
 }
 
 @Composable
-private fun ProfileTabs(tabs: List<DrawerTab>, selected: DrawerTab, onSelect: (DrawerTab) -> Unit) {
-    SingleChoiceSegmentedButtonRow(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-    ) {
-        tabs.forEachIndexed { index, tab ->
-            SegmentedButton(
-                selected = tab == selected,
-                onClick = { onSelect(tab) },
-                shape = SegmentedButtonDefaults.itemShape(index, tabs.size),
-                icon = {},
-                label = {
-                    Text(
-                        stringResource(
-                            when (tab) {
-                                DrawerTab.PERSONAL -> R.string.profile_personal
-                                DrawerTab.WORK -> R.string.profile_work
-                                DrawerTab.PRIVATE -> R.string.profile_private
-                                DrawerTab.HIDDEN -> R.string.tab_hidden
-                            },
-                        ),
-                        maxLines = 1,
-                    )
-                },
-            )
+private fun tabLabel(tab: DrawerTab, names: Map<String, String>): String = when (tab) {
+    DrawerTab.Personal -> stringResource(R.string.profile_personal)
+    DrawerTab.Work -> stringResource(R.string.profile_work)
+    DrawerTab.Private -> stringResource(R.string.profile_private)
+    DrawerTab.Hidden -> stringResource(R.string.tab_hidden)
+    is DrawerTab.Category -> names[tab.id].orEmpty().ifBlank { stringResource(R.string.category_default) }
+}
+
+/** Segmented buttons for a few tabs; a scrollable tab row once categories make it longer. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileTabs(tabs: List<DrawerTab>, selected: DrawerTab, names: Map<String, String>, onSelect: (DrawerTab) -> Unit) {
+    if (tabs.size <= 3) {
+        SingleChoiceSegmentedButtonRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                SegmentedButton(
+                    selected = tab == selected,
+                    onClick = { onSelect(tab) },
+                    shape = SegmentedButtonDefaults.itemShape(index, tabs.size),
+                    icon = {},
+                    label = { Text(tabLabel(tab, names), maxLines = 1) },
+                )
+            }
+        }
+    } else {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = tabs.indexOf(selected).coerceAtLeast(0),
+            edgePadding = 16.dp,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            divider = {},
+        ) {
+            tabs.forEach { tab ->
+                Tab(
+                    selected = tab == selected,
+                    onClick = { onSelect(tab) },
+                    text = { Text(tabLabel(tab, names), maxLines = 1) },
+                )
+            }
         }
     }
 }
@@ -325,7 +360,7 @@ private fun TabContent(
         return
     }
     val profile = model.profileByTab[tab]
-    val apps = model.appsByTab[tab].orEmpty()
+    val entries = model.entriesByTab[tab].orEmpty()
 
     if (tab == DrawerTab.PRIVATE && profile != null && profile.isQuiet) {
         StateMessage(
@@ -371,24 +406,33 @@ private fun TabContent(
             }
         }
 
-        if (tab == DrawerTab.PERSONAL && suggestions.isNotEmpty() && apps.isNotEmpty()) {
+        if (tab == DrawerTab.PERSONAL && suggestions.isNotEmpty() && entries.isNotEmpty()) {
             SuggestionsRow(suggestions, settings, cb)
         }
 
         Box(Modifier.weight(1f)) {
-            if (apps.isEmpty()) {
+            if (entries.isEmpty()) {
                 StateMessage(
                     title = stringResource(R.string.no_apps_title),
                     body = stringResource(
-                        if (tab == DrawerTab.PERSONAL) R.string.no_apps_body_hidden else R.string.no_apps_body_profile,
+                        when (tab) {
+                            DrawerTab.PERSONAL -> R.string.no_apps_body_hidden
+                            is DrawerTab.Category -> R.string.no_apps_body_category
+                            else -> R.string.no_apps_body_profile
+                        },
                     ),
                 )
             } else {
+                // Folders belong to the profile lists; categories and Hidden are plain lists.
+                val foldersAllowed = tab == DrawerTab.Personal || tab == DrawerTab.Work || tab == DrawerTab.Private
                 AppCollection(
-                    apps,
-                    settings,
-                    showProfileTag = (tab == DrawerTab.PERSONAL && model.mergedWorkProfile != null) || tab == DrawerTab.HIDDEN,
-                    cb,
+                    entries = entries,
+                    settings = settings,
+                    showProfileTag = (tab == DrawerTab.PERSONAL && model.mergedWorkProfile != null) ||
+                        tab == DrawerTab.HIDDEN || tab is DrawerTab.Category,
+                    showScroller = model.alphabetical,
+                    dragEnabled = foldersAllowed && !settings.lockHomeLayout,
+                    cb = cb,
                 )
             }
         }
@@ -411,7 +455,7 @@ private fun SuggestionsRow(suggestions: List<AppItem>, settings: LauncherSetting
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             suggestions.forEach { item ->
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                    AppCell(item, settings.copy(showGridLabels = true), cb)
+                    AppCell(item, settings.copy(showGridLabels = true), cb, drag = null)
                 }
             }
             // Keep cells the same width as a full row even with fewer suggestions.
@@ -421,62 +465,186 @@ private fun SuggestionsRow(suggestions: List<AppItem>, settings: LauncherSetting
     }
 }
 
-/** List or grid of apps, with the A-Z scroller alongside. */
+/**
+ * Drag-and-drop state for one list: which app is being dragged, where the finger is, and which
+ * cell it's over. Cells report their bounds so hit-testing doesn't depend on lazy-list internals.
+ */
+private class DrawerDrag {
+    var dragged by mutableStateOf<AppItem?>(null)
+    var pointer by mutableStateOf(Offset.Zero)
+    var target by mutableStateOf<String?>(null)
+    val bounds = HashMap<String, androidx.compose.ui.geometry.Rect>()
+
+    fun update(position: Offset) {
+        pointer = position
+        val self = dragged?.key
+        target = bounds.entries.firstOrNull { (key, rect) -> key != self && rect.contains(position) }?.key
+    }
+}
+
+/** Per-cell hookup for drag and drop. Null where dragging isn't offered (search, suggestions). */
+private class CellDrag(val state: DrawerDrag, val enabled: Boolean, val onDrop: (AppItem, DrawerEntry) -> Unit, val entries: () -> List<DrawerEntry>)
+
 @Composable
-private fun AppCollection(apps: List<AppItem>, settings: LauncherSettings, showProfileTag: Boolean, cb: DrawerCallbacks) {
+private fun Modifier.dragCell(key: String, drag: CellDrag?): Modifier {
+    if (drag == null) return this
+    DisposableEffect(key) { onDispose { drag.state.bounds.remove(key) } }
+    val hovered = drag.state.target == key
+    return this
+        .onGloballyPositioned { drag.state.bounds[key] = it.boundsInRoot() }
+        .then(
+            if (hovered) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f), RoundedCornerShape(16.dp))
+            else Modifier,
+        )
+}
+
+/** List or grid of apps and folders, with the A-Z scroller alongside. */
+@Composable
+private fun AppCollection(
+    entries: List<DrawerEntry>,
+    settings: LauncherSettings,
+    showProfileTag: Boolean,
+    showScroller: Boolean,
+    dragEnabled: Boolean,
+    cb: DrawerCallbacks,
+) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
-    val sections = remember(apps) {
-        apps.withIndex().distinctBy { it.value.section }.map { it.value.section to it.index }
+    val dragState = remember { DrawerDrag() }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val currentEntries by rememberUpdatedState(entries)
+    val drag = remember(dragEnabled, cb) {
+        CellDrag(dragState, dragEnabled, cb.onDropApp) { currentEntries }
+    }
+    val sections = remember(entries, showScroller) {
+        if (!showScroller) emptyList()
+        else entries.withIndex().distinctBy { it.value.section }.map { it.value.section to it.index }
     }
     // Starting fresh at the top whenever the content changes tab or ordering avoids "lost" lists.
-    LaunchedEffect(apps.firstOrNull()?.key) {
+    LaunchedEffect(entries.firstOrNull()?.key) {
         listState.scrollToItem(0)
         gridState.scrollToItem(0)
     }
 
-    Row(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) {
-            if (settings.drawerLayout == DrawerLayout.GRID) {
-                AppGrid(apps, settings, gridState, cb)
-            } else {
-                AppList(apps, settings, listState, showProfileTag, cb)
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                if (settings.drawerLayout == DrawerLayout.GRID) {
+                    AppGrid(entries, settings, gridState, drag, cb)
+                } else {
+                    AppList(entries, settings, listState, showProfileTag, drag, cb)
+                }
+            }
+            // Only worth showing when the list is long enough to need it.
+            if (sections.size >= 5 && entries.size > 20) {
+                AlphabetScroller(
+                    sections = sections.map { it.first },
+                    onSection = { i ->
+                        val target = sections[i].second
+                        scope.launch {
+                            if (settings.drawerLayout == DrawerLayout.GRID) gridState.scrollToItem(target)
+                            else listState.scrollToItem(target)
+                        }
+                    },
+                )
             }
         }
-        // Only worth showing when the list is long enough to need it.
-        if (sections.size >= 5 && apps.size > 20) {
-            AlphabetScroller(
-                sections = sections.map { it.first },
-                onSection = { i ->
-                    val target = sections[i].second
-                    scope.launch {
-                        if (settings.drawerLayout == DrawerLayout.GRID) gridState.scrollToItem(target)
-                        else listState.scrollToItem(target)
+        // The app under your finger while dragging.
+        dragState.dragged?.let { item ->
+            val size = settings.iconSize.dp.dp
+            val half = with(LocalDensity.current) { (size / 2).roundToPx() }
+            AppIcon(
+                item,
+                size,
+                Modifier
+                    .offset {
+                        IntOffset(
+                            (dragState.pointer.x - origin.x).roundToInt() - half,
+                            (dragState.pointer.y - origin.y).roundToInt() - half * 2,
+                        )
                     }
-                },
+                    .graphicsLayer {
+                        scaleX = 1.15f
+                        scaleY = 1.15f
+                        shadowElevation = 12f
+                    },
             )
         }
     }
 }
 
+/** Touch handling for an app cell: tap opens, long-press opens the menu, long-press + move drags. */
+@Composable
+private fun Modifier.appGestures(item: AppItem, drag: CellDrag?, cb: DrawerCallbacks, onTap: () -> Unit): Modifier {
+    val haptics = LocalHapticFeedback.current
+    val moreLabel = stringResource(R.string.more_options)
+    if (drag == null) {
+        return this
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = item.label,
+                onLongClickLabel = moreLabel,
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    cb.onLongPress(item)
+                },
+                onClick = onTap,
+            )
+            .semantics { customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(item); true }) }
+    }
+    val coords = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val latestTap by rememberUpdatedState(onTap)
+    return this
+        .onGloballyPositioned { coords[0] = it }
+        .clickable(role = Role.Button, onClickLabel = item.label) { latestTap() }
+        .longPressDrag(item.key, drag.enabled, haptics, { coords[0] }) {
+            LongPressDragCallbacks(
+                onMenu = { cb.onLongPress(item) },
+                onDragStart = { p ->
+                    drag.state.dragged = item
+                    drag.state.update(p)
+                },
+                onDrag = { p -> drag.state.update(p) },
+                onDragEnd = {
+                    val targetKey = drag.state.target
+                    val target = drag.entries().firstOrNull { it.key == targetKey }
+                    drag.state.dragged = null
+                    drag.state.target = null
+                    if (target != null) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        drag.onDrop(item, target)
+                    }
+                },
+            )
+        }
+        .semantics {
+            onLongClick(moreLabel) { cb.onLongPress(item); true }
+            customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(item); true })
+        }
+}
+
 @Composable
 private fun AppList(
-    apps: List<AppItem>,
+    entries: List<DrawerEntry>,
     settings: LauncherSettings,
     state: LazyListState,
     showProfileTag: Boolean,
+    drag: CellDrag,
     cb: DrawerCallbacks,
 ) {
     LazyColumn(state = state, contentPadding = PaddingValues(vertical = 8.dp)) {
-        itemsIndexed(apps, key = { _, it -> it.key }, contentType = { _, _ -> "app" }) { _, item ->
-            AppRow(item, settings, showProfileTag, highlighted = false, cb)
+        itemsIndexed(entries, key = { _, it -> it.key }, contentType = { _, it -> if (it is DrawerEntry.Folder) "folder" else "app" }) { _, entry ->
+            when (entry) {
+                is DrawerEntry.App -> AppRow(entry.item, settings, showProfileTag, highlighted = false, cb, drag)
+                is DrawerEntry.Folder -> FolderRow(entry, settings, drag, cb)
+            }
         }
     }
 }
 
 @Composable
-private fun AppGrid(apps: List<AppItem>, settings: LauncherSettings, state: LazyGridState, cb: DrawerCallbacks) {
+private fun AppGrid(entries: List<DrawerEntry>, settings: LauncherSettings, state: LazyGridState, drag: CellDrag, cb: DrawerCallbacks) {
     val cells = if (settings.gridColumns == 0) GridCells.Adaptive(settings.iconSize.dp.dp + 40.dp)
     else GridCells.Fixed(settings.gridColumns)
     LazyVerticalGrid(
@@ -485,35 +653,40 @@ private fun AppGrid(apps: List<AppItem>, settings: LauncherSettings, state: Lazy
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        itemsIndexed(apps, key = { _, it -> it.key }, contentType = { _, _ -> "app" }) { _, item ->
-            AppCell(item, settings, cb)
+        itemsIndexed(entries, key = { _, it -> it.key }, contentType = { _, it -> if (it is DrawerEntry.Folder) "folder" else "app" }) { _, entry ->
+            when (entry) {
+                is DrawerEntry.App -> AppCell(entry.item, settings, cb, drag)
+                is DrawerEntry.Folder -> FolderCell(entry, settings, drag, cb)
+            }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AppRow(item: AppItem, settings: LauncherSettings, showProfileTag: Boolean, highlighted: Boolean, cb: DrawerCallbacks) {
+fun AppRow(item: AppItem, settings: LauncherSettings, showProfileTag: Boolean, highlighted: Boolean, cb: DrawerCallbacks) =
+    AppRow(item, settings, showProfileTag, highlighted, cb, drag = null)
+
+@Composable
+private fun AppRow(
+    item: AppItem,
+    settings: LauncherSettings,
+    showProfileTag: Boolean,
+    highlighted: Boolean,
+    cb: DrawerCallbacks,
+    drag: CellDrag?,
+) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
-    val haptics = LocalHapticFeedback.current
-    val moreLabel = stringResource(R.string.more_options)
+    val dragging = drag?.state?.dragged?.key == item.key
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp)
+            .dragCell(item.key, drag)
             .clip(RoundedCornerShape(16.dp))
             .then(if (highlighted) Modifier.background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)) else Modifier)
-            .combinedClickable(
-                role = Role.Button,
-                onLongClickLabel = moreLabel,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    cb.onLongPress(item)
-                },
-                onClick = { cb.onLaunch(item, bounds) },
-            )
-            .semantics { customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(item); true }) }
+            .appGestures(item, drag, cb) { cb.onLaunch(item, bounds) }
             .onGloballyPositioned { bounds = it.windowRect() }
+            .graphicsLayer { alpha = if (dragging) 0.3f else 1f }
             .padding(horizontal = 16.dp, vertical = if (settings.showListIcons) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -538,27 +711,17 @@ fun AppRow(item: AppItem, settings: LauncherSettings, showProfileTag: Boolean, h
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppCell(item: AppItem, settings: LauncherSettings, cb: DrawerCallbacks) {
+private fun AppCell(item: AppItem, settings: LauncherSettings, cb: DrawerCallbacks, drag: CellDrag?) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
-    val haptics = LocalHapticFeedback.current
-    val moreLabel = stringResource(R.string.more_options)
+    val dragging = drag?.state?.dragged?.key == item.key
     Column(
         Modifier
+            .dragCell(item.key, drag)
             .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(
-                role = Role.Button,
-                onClickLabel = item.label,
-                onLongClickLabel = moreLabel,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    cb.onLongPress(item)
-                },
-                onClick = { cb.onLaunch(item, bounds) },
-            )
-            .semantics { customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(item); true }) }
+            .appGestures(item, drag, cb) { cb.onLaunch(item, bounds) }
             .onGloballyPositioned { bounds = it.windowRect() }
+            .graphicsLayer { alpha = if (dragging) 0.3f else 1f }
             .padding(vertical = 8.dp, horizontal = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -577,6 +740,64 @@ private fun AppCell(item: AppItem, settings: LauncherSettings, cb: DrawerCallbac
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FolderCell(entry: DrawerEntry.Folder, settings: LauncherSettings, drag: CellDrag, cb: DrawerCallbacks) {
+    val label = stringResource(R.string.open_folder, entry.label)
+    Column(
+        Modifier
+            .dragCell(entry.key, drag)
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(role = Role.Button, onClickLabel = label, onLongClick = { cb.onOpenFolder(entry) }) { cb.onOpenFolder(entry) }
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        FolderIcon(entry.apps, settings.iconSize.dp.dp)
+        if (settings.showGridLabels) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                entry.label,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FolderRow(entry: DrawerEntry.Folder, settings: LauncherSettings, drag: CellDrag, cb: DrawerCallbacks) {
+    val label = stringResource(R.string.open_folder, entry.label)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .dragCell(entry.key, drag)
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(role = Role.Button, onClickLabel = label, onLongClick = { cb.onOpenFolder(entry) }) { cb.onOpenFolder(entry) }
+            .padding(horizontal = 16.dp, vertical = if (settings.showListIcons) 8.dp else 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (settings.showListIcons) {
+            FolderIcon(entry.apps, (settings.iconSize.dp - 8).dp)
+            Spacer(Modifier.width(16.dp))
+        }
+        Text(
+            entry.label,
+            Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            entry.apps.size.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

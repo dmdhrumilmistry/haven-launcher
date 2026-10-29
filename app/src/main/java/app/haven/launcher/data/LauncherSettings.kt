@@ -16,6 +16,15 @@ enum class IconSize(val dp: Int) { SMALL(40), MEDIUM(48), LARGE(56) }
 enum class IconShape { SYSTEM, CIRCLE, SQUIRCLE, ROUNDED_SQUARE }
 enum class SwipeDownAction { NOTIFICATIONS, SEARCH, NONE }
 enum class DoubleTapAction { LOCK, NONE }
+enum class DrawerSort { ALPHABETICAL, MOST_USED }
+
+/** A folder in the app drawer. Its apps leave the main list and live inside it. */
+data class DrawerFolder(val id: String, val name: String, val apps: List<String>)
+
+/** A user category: a drawer tab. Apps can be in several categories and stay in the main list too. */
+data class AppCategory(val id: String, val name: String, val apps: Set<String>)
+
+fun newId(): String = java.util.UUID.randomUUID().toString()
 
 /**
  * Something pinned to the home screen: either an app or a pinned shortcut (e.g. a website a browser
@@ -29,6 +38,11 @@ sealed interface HomeItem {
 
     data class App(val appKey: String) : HomeItem {
         override val id get() = "app:$appKey"
+    }
+
+    /** A folder of apps on the home screen. An empty name shows as "Folder". */
+    data class Folder(val folderId: String, val name: String, val apps: List<String>) : HomeItem {
+        override val id get() = "folder:$folderId"
     }
 
     data class Shortcut(
@@ -84,6 +98,9 @@ data class LauncherSettings(
     val themedIcons: Boolean = false,
     val separateProfileTabs: Boolean = true,
     val showSuggestions: Boolean = true,
+    val drawerSort: DrawerSort = DrawerSort.ALPHABETICAL,
+    val drawerFolders: List<DrawerFolder> = emptyList(),
+    val categories: List<AppCategory> = emptyList(),
 
     // Search
     // Off: opening the drawer to browse shouldn't throw a keyboard over half the apps.
@@ -109,7 +126,12 @@ data class LauncherSettings(
     val pausedApps: Map<String, Long> = emptyMap(),
     val pauseSchedules: List<PauseSchedule> = emptyList(),
 ) {
-    fun isFavorite(appKey: String) = favorites.any { it is HomeItem.App && it.appKey == appKey }
+    /** On the home screen, directly or inside a home folder. */
+    fun isFavorite(appKey: String) = favorites.any {
+        (it is HomeItem.App && it.appKey == appKey) || (it is HomeItem.Folder && appKey in it.apps)
+    }
+
+    fun drawerFolderOf(appKey: String): DrawerFolder? = drawerFolders.firstOrNull { appKey in it.apps }
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("version", SCHEMA_VERSION)
@@ -131,6 +153,13 @@ data class LauncherSettings(
         put("showDrawerButton", showDrawerButton)
         put("lockHomeLayout", lockHomeLayout)
         put("showSuggestions", showSuggestions)
+        put("drawerSort", drawerSort.name)
+        put("drawerFolders", JSONArray().apply {
+            drawerFolders.forEach { f -> put(JSONObject().put("id", f.id).put("name", f.name).put("apps", JSONArray(f.apps))) }
+        })
+        put("categories", JSONArray().apply {
+            categories.forEach { c -> put(JSONObject().put("id", c.id).put("name", c.name).put("apps", JSONArray(c.apps.sorted()))) }
+        })
         put("lockHiddenApps", lockHiddenApps)
         put("showHiddenTab", showHiddenTab)
         put("favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
@@ -187,6 +216,21 @@ data class LauncherSettings(
                 showDrawerButton = json.optBoolean("showDrawerButton", d.showDrawerButton),
                 lockHomeLayout = json.optBoolean("lockHomeLayout", d.lockHomeLayout),
                 showSuggestions = json.optBoolean("showSuggestions", d.showSuggestions),
+                drawerSort = json.enum("drawerSort", d.drawerSort),
+                drawerFolders = json.optJSONArray("drawerFolders")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                        val id = o.optString("id").ifBlank { return@mapNotNull null }
+                        DrawerFolder(id, o.optString("name").take(40), o.strings("apps").distinct())
+                    }.filter { it.apps.isNotEmpty() }.distinctBy { it.id }
+                } ?: d.drawerFolders,
+                categories = json.optJSONArray("categories")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                        val id = o.optString("id").ifBlank { return@mapNotNull null }
+                        AppCategory(id, o.optString("name").take(40), o.strings("apps").toSet())
+                    }.distinctBy { it.id }
+                } ?: d.categories,
                 lockHiddenApps = json.optBoolean("lockHiddenApps", d.lockHiddenApps),
                 showHiddenTab = json.optBoolean("showHiddenTab", d.showHiddenTab),
                 favorites = json.optJSONArray("favorites")?.let { arr ->
@@ -235,6 +279,11 @@ data class LauncherSettings(
 
         private fun HomeItem.toJson(): JSONObject = when (this) {
             is HomeItem.App -> JSONObject().put("type", "app").put("key", appKey)
+            is HomeItem.Folder -> JSONObject()
+                .put("type", "folder")
+                .put("id", folderId)
+                .put("name", name)
+                .put("apps", JSONArray(apps))
             is HomeItem.Shortcut -> JSONObject()
                 .put("type", "shortcut")
                 .put("package", packageName)
@@ -245,6 +294,11 @@ data class LauncherSettings(
 
         private fun homeItemFromJson(o: JSONObject): HomeItem? = when (o.optString("type")) {
             "app" -> o.optString("key").takeIf { AppKey.parse(it) != null }?.let { HomeItem.App(it) }
+            "folder" -> {
+                val id = o.optString("id")
+                val apps = o.strings("apps").filter { AppKey.parse(it) != null }.distinct()
+                if (id.isBlank() || apps.isEmpty()) null else HomeItem.Folder(id, o.optString("name").take(40), apps)
+            }
             "shortcut" -> {
                 val pkg = o.optString("package")
                 val id = o.optString("id")
@@ -253,6 +307,9 @@ data class LauncherSettings(
             }
             else -> null
         }
+
+        private fun JSONObject.strings(key: String): List<String> =
+            optJSONArray(key)?.let { a -> (0 until a.length()).mapNotNull { a.optString(it).takeIf(String::isNotBlank) } }.orEmpty()
 
         private inline fun <reified E : Enum<E>> JSONObject.enum(key: String, default: E): E =
             optString(key).let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
