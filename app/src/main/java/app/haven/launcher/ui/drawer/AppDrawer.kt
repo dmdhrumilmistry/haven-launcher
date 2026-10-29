@@ -124,6 +124,9 @@ class DrawerCallbacks(
 /** Recently installed apps that haven't been opened yet; they get a small dot. */
 val LocalNewApps = compositionLocalOf { emptySet<String>() }
 
+/** Whether hidden apps are unlocked right now (only matters when the hidden-apps lock is on). */
+val LocalHiddenUnlocked = compositionLocalOf { false }
+
 @Composable
 fun AppDrawer(
     settings: LauncherSettings,
@@ -134,6 +137,7 @@ fun AppDrawer(
     search: SearchState,
     suggestions: List<AppItem>,
     newApps: Set<String>,
+    hiddenUnlocked: Boolean,
     searchFocus: FocusRequester,
     callbacks: DrawerCallbacks,
     modifier: Modifier = Modifier,
@@ -174,7 +178,7 @@ fun AppDrawer(
                 .fillMaxWidth()
                 .nestedScroll(hideKeyboardOnScroll),
         ) {
-            CompositionLocalProvider(LocalNewApps provides newApps) {
+            CompositionLocalProvider(LocalNewApps provides newApps, LocalHiddenUnlocked provides hiddenUnlocked) {
                 when {
                     query.isNotBlank() -> SearchResults(query, search, settings, callbacks)
                     !loaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -264,6 +268,7 @@ private fun ProfileTabs(tabs: List<DrawerTab>, selected: DrawerTab, onSelect: (D
                                 DrawerTab.PERSONAL -> R.string.profile_personal
                                 DrawerTab.WORK -> R.string.profile_work
                                 DrawerTab.PRIVATE -> R.string.profile_private
+                                DrawerTab.HIDDEN -> R.string.tab_hidden
                             },
                         ),
                         maxLines = 1,
@@ -309,6 +314,15 @@ private fun TabContent(
     suggestions: List<AppItem>,
     cb: DrawerCallbacks,
 ) {
+    if (tab == DrawerTab.HIDDEN && settings.lockHiddenApps && !LocalHiddenUnlocked.current) {
+        StateMessage(
+            title = stringResource(R.string.hidden_locked_title),
+            body = stringResource(R.string.hidden_locked_body),
+            action = stringResource(R.string.action_unlock),
+            onAction = cb.onUnlockHidden,
+        )
+        return
+    }
     val profile = model.profileByTab[tab]
     val apps = model.appsByTab[tab].orEmpty()
 
@@ -369,7 +383,12 @@ private fun TabContent(
                     ),
                 )
             } else {
-                AppCollection(apps, settings, showProfileTag = tab == DrawerTab.PERSONAL && model.mergedWorkProfile != null, cb)
+                AppCollection(
+                    apps,
+                    settings,
+                    showProfileTag = (tab == DrawerTab.PERSONAL && model.mergedWorkProfile != null) || tab == DrawerTab.HIDDEN,
+                    cb,
+                )
             }
         }
 

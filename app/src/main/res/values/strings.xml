@@ -104,6 +104,12 @@
     <string name="setting_lock_layout_summary">Prevent moving apps and changing widgets by accident</string>
     <string name="home_layout_locked">Home screen layout is locked. Unlock it in Haven settings.</string>
     <string name="action_clone">Clone app</string>
+    <string name="error_clone">Couldn\'t open your phone\'s app cloning screen</string>
+    <string name="tab_hidden">Hidden</string>
+    <string name="hidden_locked_title">Hidden apps are locked</string>
+    <string name="hidden_locked_body">Unlock with your fingerprint, face or screen lock to see them.</string>
+    <string name="setting_hidden_tab">Hidden section in app drawer</string>
+    <string name="setting_hidden_tab_summary">Show hidden apps in their own tab, next to Personal and Work</string>
     <string name="action_copy">Copy</string>
     <string name="copied">Copied</string>
 

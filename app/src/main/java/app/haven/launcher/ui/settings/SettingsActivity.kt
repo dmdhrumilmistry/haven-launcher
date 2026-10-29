@@ -457,6 +457,14 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 enabled = secure || s.lockHiddenApps,
             )
         }
+        item {
+            SwitchRow(
+                stringResource(R.string.setting_hidden_tab),
+                s.showHiddenTab,
+                { v -> repo.update { it.copy(showHiddenTab = v) } },
+                summary = stringResource(R.string.setting_hidden_tab_summary),
+            )
+        }
 
         // ---- Search ----
         item { SectionHeader(stringResource(R.string.section_search)) }
