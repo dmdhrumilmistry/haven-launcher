@@ -2,6 +2,7 @@ package app.haven.launcher.data
 
 import android.content.Context
 import android.util.Log
+import app.haven.launcher.focus.PauseSchedule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +76,24 @@ class SettingsRepository(context: Context) {
         list.add(to, list.removeAt(from))
         s.copy(widgets = list)
     }
+
+    fun pauseApp(appKey: String, until: Long) = update { s ->
+        val now = System.currentTimeMillis()
+        // Drop expired pauses while we're here so the store doesn't grow forever.
+        s.copy(pausedApps = s.pausedApps.filterValues { it > now } + (appKey to until))
+    }
+
+    fun unpauseApp(appKey: String) = update { s -> s.copy(pausedApps = s.pausedApps - appKey) }
+
+    fun upsertSchedule(schedule: PauseSchedule) = update { s ->
+        val exists = s.pauseSchedules.any { it.id == schedule.id }
+        s.copy(
+            pauseSchedules = if (exists) s.pauseSchedules.map { if (it.id == schedule.id) schedule else it }
+            else s.pauseSchedules + schedule,
+        )
+    }
+
+    fun deleteSchedule(id: String) = update { s -> s.copy(pauseSchedules = s.pauseSchedules.filterNot { it.id == id }) }
 
     // Convenience edits used across the UI.
 

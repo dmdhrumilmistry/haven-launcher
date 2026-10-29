@@ -47,6 +47,10 @@
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
         </intent>
+        <!-- Digital Wellbeing's app timer screen. -->
+        <intent>
+            <action android:name="android.settings.action.APP_USAGE_SETTINGS" />
+        </intent>
         <!-- Phone makers' own app-cloning screens, for "Clone app". -->
         <intent>
             <action android:name="android.settings.MANAGE_CLONED_APPS_SETTINGS" />

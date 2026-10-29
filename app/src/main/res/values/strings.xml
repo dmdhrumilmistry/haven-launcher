@@ -113,6 +113,46 @@
     <string name="action_copy">Copy</string>
     <string name="copied">Copied</string>
 
+    <!-- Pausing -->
+    <string name="action_pause">Pause app</string>
+    <string name="action_unpause">Unpause</string>
+    <string name="action_open_anyway">Open anyway</string>
+    <string name="action_app_timer">App timer (Digital Wellbeing)</string>
+    <string name="pause_title">Pause %1$s</string>
+    <string name="pause_explainer">It\'ll be greyed out in Haven and ask before opening. Notifications still come through.</string>
+    <string name="pause_15_min">For 15 minutes</string>
+    <string name="pause_1_hour">For 1 hour</string>
+    <string name="pause_today">For the rest of today</string>
+    <string name="pause_forever">Until I unpause it</string>
+    <string name="app_is_paused">%1$s is paused</string>
+    <string name="paused_until">Paused until %1$s</string>
+    <string name="paused_until_unpaused">Paused until you unpause it</string>
+    <string name="paused_by_schedule">Paused by \"%1$s\" until %2$s</string>
+    <string name="section_pausing">Pausing</string>
+    <string name="settings_pauses">Paused apps and schedules</string>
+    <string name="settings_pauses_summary">%1$d paused now · %2$d schedules on</string>
+    <string name="pauses_explainer">Paused apps are greyed out in Haven and ask before opening, so you open them on purpose. For a hard limit, use App timer (Digital Wellbeing) from an app\'s long-press menu.</string>
+    <string name="pauses_now">Paused now</string>
+    <string name="pauses_none">Nothing paused. Long-press any app and choose \"Pause app\".</string>
+    <string name="schedules">Schedules</string>
+    <string name="schedules_none">Pause a set of apps at the same time every day or week, like during work or at night.</string>
+    <string name="schedule_add">Add schedule</string>
+    <string name="schedule_title">Schedule</string>
+    <string name="schedule_name">Name</string>
+    <string name="schedule_default_name">Focus time</string>
+    <string name="schedule_enabled">Schedule on</string>
+    <string name="schedule_days">Days</string>
+    <string name="schedule_time">Time</string>
+    <string name="schedule_start">Starts</string>
+    <string name="schedule_end">Ends</string>
+    <string name="schedule_overnight">Runs overnight and ends the next morning.</string>
+    <string name="schedule_same_time">Start and end are the same, so this schedule never runs.</string>
+    <string name="schedule_apps">Apps to pause</string>
+    <string name="schedule_delete">Delete schedule</string>
+    <string name="days_every_day">Every day</string>
+    <string name="days_weekdays">Weekdays</string>
+    <string name="days_weekends">Weekends</string>
+
     <!-- Rename -->
     <string name="rename_title">Rename app</string>
     <string name="rename_original">Original name: %1$s</string>
@@ -250,6 +290,10 @@
     <string name="about_version">Version</string>
 
     <plurals name="home_apps_count">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="schedule_apps">
         <item quantity="one">%d app</item>
         <item quantity="other">%d apps</item>
     </plurals>

@@ -71,6 +71,7 @@ import app.haven.launcher.data.LauncherSettings
 import app.haven.launcher.system.SystemActions
 import app.haven.launcher.ui.HomeEntry
 import app.haven.launcher.ui.components.AppIcon
+import app.haven.launcher.ui.components.LocalPausedApps
 import app.haven.launcher.ui.components.ShortcutIcon
 import app.haven.launcher.ui.components.windowRect
 
@@ -320,7 +321,8 @@ private fun ListItem(
 ) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
     val label = entry.label()
-    val dimmed = entry is HomeEntry.App && (entry.item.isPaused || entry.item.app.isSuspended)
+    val dimmed = entry is HomeEntry.App &&
+        (entry.item.isPaused || entry.item.app.isSuspended || entry.item.key in LocalPausedApps.current)
     val moreLabel = stringResource(R.string.more_options)
     Row(
         Modifier

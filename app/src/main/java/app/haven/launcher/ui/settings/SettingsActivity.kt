@@ -44,6 +44,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +80,9 @@ import app.haven.launcher.data.Search
 import app.haven.launcher.data.SwipeDownAction
 import app.haven.launcher.data.TextColorMode
 import app.haven.launcher.data.ThemeMode
+import app.haven.launcher.focus.PauseSchedule
+import app.haven.launcher.focus.PausesPage
+import app.haven.launcher.focus.ScheduleEditor
 import app.haven.launcher.haven
 import app.haven.launcher.system.DeviceAuth
 import app.haven.launcher.system.LauncherAccessibilityService
@@ -98,7 +102,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private enum class Page { MAIN, HOME_APPS, ADD_HOME_APPS, HIDDEN_APPS }
+private enum class Page { MAIN, HOME_APPS, ADD_HOME_APPS, HIDDEN_APPS, PAUSES, SCHEDULE }
 
 class SettingsActivity : ComponentActivity() {
     private val vm: LauncherViewModel by viewModels()
@@ -127,10 +131,12 @@ class SettingsActivity : ComponentActivity() {
 @Composable
 private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, startPage: Page, onExit: () -> Unit) {
     var page by rememberSaveable { mutableStateOf(startPage) }
+    var editingSchedule by rememberSaveable { mutableStateOf<String?>(null) }
     val goBack: () -> Unit = {
         when (page) {
             Page.MAIN -> onExit()
             Page.ADD_HOME_APPS -> page = Page.HOME_APPS
+            Page.SCHEDULE -> page = Page.PAUSES
             // Opened straight from the home screen's menu: back returns there.
             else -> if (startPage == page) onExit() else page = Page.MAIN
         }
@@ -154,6 +160,8 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                                 Page.HOME_APPS -> R.string.settings_home_apps
                                 Page.ADD_HOME_APPS -> R.string.settings_add_home_apps
                                 Page.HIDDEN_APPS -> R.string.settings_hidden_apps
+                                Page.PAUSES -> R.string.settings_pauses
+                                Page.SCHEDULE -> R.string.schedule_title
                             },
                         ),
                     )
@@ -173,6 +181,46 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                 Page.HOME_APPS -> HomeAppsPage(vm, settings, onAdd = { page = Page.ADD_HOME_APPS })
                 Page.ADD_HOME_APPS -> AddHomeAppsPage(vm, settings)
                 Page.HIDDEN_APPS -> HiddenAppsPage(vm)
+                Page.PAUSES -> {
+                    val apps by vm.allApps.collectAsStateWithLifecycle()
+                    val repo = LocalContext.current.haven.settings
+                    PausesPage(
+                        apps = apps,
+                        pausedApps = settings.pausedApps,
+                        schedules = settings.pauseSchedules,
+                        onUnpause = repo::unpauseApp,
+                        onToggleSchedule = { sch, on -> repo.upsertSchedule(sch.copy(enabled = on)) },
+                        onEditSchedule = {
+                            editingSchedule = it.id
+                            page = Page.SCHEDULE
+                        },
+                        onAddSchedule = {
+                            val fresh = PauseSchedule(name = "")
+                            repo.upsertSchedule(fresh)
+                            editingSchedule = fresh.id
+                            page = Page.SCHEDULE
+                        },
+                    )
+                }
+                Page.SCHEDULE -> {
+                    val apps by vm.allApps.collectAsStateWithLifecycle()
+                    val repo = LocalContext.current.haven.settings
+                    val schedule = settings.pauseSchedules.firstOrNull { it.id == editingSchedule }
+                    if (schedule == null) {
+                        // Deleted elsewhere (or restored after process death): go back to the list.
+                        LaunchedEffect(Unit) { page = Page.PAUSES }
+                    } else {
+                        ScheduleEditor(
+                            schedule = schedule,
+                            apps = apps,
+                            onChange = repo::upsertSchedule,
+                            onDelete = {
+                                repo.deleteSchedule(schedule.id)
+                                page = Page.PAUSES
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -464,6 +512,16 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 { v -> repo.update { it.copy(showHiddenTab = v) } },
                 summary = stringResource(R.string.setting_hidden_tab_summary),
             )
+        }
+
+        // ---- Pausing ----
+        item { SectionHeader(stringResource(R.string.section_pausing)) }
+        item {
+            val active = s.pausedApps.count { it.value > System.currentTimeMillis() }
+            ClickRow(
+                stringResource(R.string.settings_pauses),
+                stringResource(R.string.settings_pauses_summary, active, s.pauseSchedules.count { it.enabled }),
+            ) { onOpenPage(Page.PAUSES) }
         }
 
         // ---- Search ----
