@@ -106,6 +106,7 @@ import app.haven.launcher.system.SystemActions
 import app.haven.launcher.ui.DrawerModel
 import app.haven.launcher.ui.DrawerTab
 import app.haven.launcher.ui.components.AppIcon
+import app.haven.launcher.ui.components.LocalPausedApps
 import app.haven.launcher.ui.components.ProfileTag
 import app.haven.launcher.ui.components.profileLabel
 import app.haven.launcher.ui.components.windowRect
@@ -525,7 +526,7 @@ fun AppRow(item: AppItem, settings: LauncherSettings, showProfileTag: Boolean, h
             item.label,
             Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused) 0.5f else 1f),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused || item.key in LocalPausedApps.current) 0.5f else 1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -569,7 +570,7 @@ private fun AppCell(item: AppItem, settings: LauncherSettings, cb: DrawerCallbac
                 Text(
                     item.label,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused) 0.5f else 1f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (item.isPaused || item.key in LocalPausedApps.current) 0.5f else 1f),
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

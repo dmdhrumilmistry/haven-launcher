@@ -112,6 +112,19 @@ object SystemActions {
     fun canStoreSearch(context: Context) =
         canResolve(context, Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=x")))
 
+    /** Digital Wellbeing's per-app screen (app timer), Android 10+. Real, system-enforced limits. */
+    private fun appTimerIntent(app: InstalledApp): Intent? {
+        if (Build.VERSION.SDK_INT < 29 || !isMyUser(app.user)) return null
+        return Intent(Settings.ACTION_APP_USAGE_SETTINGS).putExtra(Intent.EXTRA_PACKAGE_NAME, app.packageName)
+    }
+
+    fun canOpenAppTimer(context: Context, app: InstalledApp): Boolean =
+        appTimerIntent(app)?.let { canResolve(context, it) } ?: false
+
+    fun openAppTimer(context: Context, app: InstalledApp) {
+        appTimerIntent(app)?.let { safeStart(context, it) }
+    }
+
     fun openAlarms(context: Context) {
         safeStart(context, Intent(AlarmClock.ACTION_SHOW_ALARMS))
     }

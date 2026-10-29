@@ -1,5 +1,6 @@
 package app.haven.launcher.data
 
+import app.haven.launcher.focus.PauseSchedule
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -103,6 +104,10 @@ data class LauncherSettings(
     // Per-app customisation (keys are AppKey strings)
     val hiddenApps: Set<String> = emptySet(),
     val customLabels: Map<String, String> = emptyMap(),
+
+    // Pausing (soft, Haven-level): manual pauses (app key -> until, epoch ms) and schedules.
+    val pausedApps: Map<String, Long> = emptyMap(),
+    val pauseSchedules: List<PauseSchedule> = emptyList(),
 ) {
     fun isFavorite(appKey: String) = favorites.any { it is HomeItem.App && it.appKey == appKey }
 
@@ -148,6 +153,8 @@ data class LauncherSettings(
         put("doubleTapAction", doubleTapAction.name)
         put("hiddenApps", JSONArray().apply { hiddenApps.sorted().forEach { put(it) } })
         put("customLabels", JSONObject().apply { customLabels.forEach { (k, v) -> put(k, v) } })
+        put("pausedApps", JSONObject().apply { pausedApps.forEach { (k, v) -> put(k, v) } })
+        put("pauseSchedules", JSONArray().apply { pauseSchedules.forEach { put(it.toJson()) } })
     }
 
     companion object {
@@ -217,6 +224,12 @@ data class LauncherSettings(
                         .mapNotNull { k -> obj.optString(k).trim().takeIf { it.isNotEmpty() }?.let { k to it } }
                         .toMap()
                 } ?: d.customLabels,
+                pausedApps = json.optJSONObject("pausedApps")?.let { obj ->
+                    obj.keys().asSequence().associateWith { obj.optLong(it, 0L) }.filterValues { it > 0 }
+                } ?: d.pausedApps,
+                pauseSchedules = json.optJSONArray("pauseSchedules")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(PauseSchedule::fromJson) }.distinctBy { it.id }
+                } ?: d.pauseSchedules,
             )
         }
 

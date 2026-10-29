@@ -18,6 +18,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -61,6 +64,8 @@ import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.ProfileType
 import app.haven.launcher.data.SettingsRepository
+import app.haven.launcher.focus.PauseState
+import app.haven.launcher.focus.pauseDescription
 import app.haven.launcher.system.SystemActions
 
 @Composable
@@ -87,6 +92,12 @@ fun AppActionsSheet(
     onDismiss: () -> Unit,
     /** Opens the phone's own app-cloning screen; null where the phone has none. */
     onClone: (() -> Unit)? = null,
+    /** Haven-level pause state, if paused right now. */
+    pauseState: PauseState? = null,
+    onPause: (() -> Unit)? = null,
+    onUnpause: (() -> Unit)? = null,
+    /** Digital Wellbeing's app timer for this app; null where unavailable. */
+    onAppTimer: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -113,6 +124,7 @@ fun AppActionsSheet(
                         item.app.systemLabel.takeIf { it != item.label },
                         stringResource(R.string.app_paused).takeIf { item.isPaused },
                         stringResource(R.string.app_suspended).takeIf { item.app.isSuspended },
+                        pauseState?.let { pauseDescription(it) },
                     ).joinToString(" · ")
                     if (secondary.isNotEmpty()) {
                         Text(secondary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -163,6 +175,16 @@ fun AppActionsSheet(
             ActionRow(Icons.Filled.Info, stringResource(R.string.action_app_info)) {
                 SystemActions.openAppInfo(context, item.app.component, item.app.user)
                 onDismiss()
+            }
+            when {
+                pauseState is PauseState.Manual && onUnpause != null ->
+                    ActionRow(Icons.Filled.PlayArrow, stringResource(R.string.action_unpause), onUnpause)
+                // Paused by a schedule: that's changed in settings, the subtitle explains.
+                pauseState == null && onPause != null ->
+                    ActionRow(Icons.Filled.DateRange, stringResource(R.string.action_pause), onPause)
+            }
+            if (onAppTimer != null) {
+                ActionRow(Icons.Filled.Notifications, stringResource(R.string.action_app_timer), onAppTimer)
             }
             if (onClone != null) {
                 ActionRow(Icons.Filled.AddCircle, stringResource(R.string.action_clone), onClone)

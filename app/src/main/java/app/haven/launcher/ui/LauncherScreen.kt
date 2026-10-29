@@ -67,6 +67,9 @@ import app.haven.launcher.ui.components.ActionRow
 import app.haven.launcher.ui.components.AppActionsSheet
 import app.haven.launcher.ui.components.IconPrefs
 import app.haven.launcher.ui.components.LocalIconPrefs
+import app.haven.launcher.ui.components.LocalPausedApps
+import app.haven.launcher.focus.AppPausedDialog
+import app.haven.launcher.focus.PauseChooserDialog
 import app.haven.launcher.ui.components.RenameDialog
 import app.haven.launcher.ui.components.ShortcutActionsSheet
 import app.haven.launcher.ui.drawer.AppDrawer
@@ -105,6 +108,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val suggestions by vm.suggestions.collectAsStateWithLifecycle()
     val newApps by vm.newApps.collectAsStateWithLifecycle()
     val hiddenUnlocked by vm.hiddenUnlocked.collectAsStateWithLifecycle()
+    val pauses by vm.pauses.collectAsStateWithLifecycle()
+    var pauseTarget by remember { mutableStateOf<AppItem?>(null) }
 
     val context = LocalContext.current
     val view = LocalView.current
@@ -173,6 +178,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         // Hidden apps relock as soon as the home screen leaves view.
         vm.setHiddenUnlocked(false)
+        pauseTarget = null
         sheetApp = null
         sheetShortcut = null
         renameApp = null
@@ -325,7 +331,10 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     }
 
     HavenTheme(settings) {
-        CompositionLocalProvider(LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons)) {
+        CompositionLocalProvider(
+            LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons),
+            LocalPausedApps provides pauses.keys,
+        ) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -418,6 +427,21 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         renameApp = live
                         sheetApp = null
                     },
+                    pauseState = pauses[live.key],
+                    onPause = {
+                        sheetApp = null
+                        pauseTarget = live
+                    },
+                    onUnpause = {
+                        sheetApp = null
+                        vm.unpauseApp(live)
+                    },
+                    onAppTimer = if (SystemActions.canOpenAppTimer(context, live.app)) {
+                        {
+                            sheetApp = null
+                            SystemActions.openAppTimer(context, live.app)
+                        }
+                    } else null,
                     onClone = if (live.profileType == ProfileType.PERSONAL && CloneSupport.cloneSettingsIntent(context) != null) {
                         {
                             sheetApp = null
@@ -510,7 +534,11 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 }
             }
 
-            PromptDialog(prompt, vm)
+            pauseTarget?.let { app ->
+                PauseChooserDialog(app, onPause = { until -> vm.pauseApp(app, until) }, onDismiss = { pauseTarget = null })
+            }
+
+            PromptDialog(prompt, vm, view)
         }
     }
 }
@@ -534,10 +562,17 @@ private fun AutoLaunch(enabled: Boolean, search: SearchState, launch: (AppItem) 
 }
 
 @Composable
-private fun PromptDialog(prompt: LauncherPrompt?, vm: LauncherViewModel) {
+private fun PromptDialog(prompt: LauncherPrompt?, vm: LauncherViewModel, view: android.view.View) {
     val context = LocalContext.current
     when (prompt) {
         null -> Unit
+        is LauncherPrompt.AppPaused -> AppPausedDialog(
+            app = prompt.item,
+            state = prompt.state,
+            onOpenAnyway = { vm.launchNow(prompt.item, view, null) },
+            onUnpause = { vm.unpauseApp(prompt.item) },
+            onDismiss = vm::dismissPrompt,
+        )
         is LauncherPrompt.TurnOnWorkApps -> AlertDialog(
             onDismissRequest = vm::dismissPrompt,
             title = { Text(stringResource(R.string.work_paused_title)) },

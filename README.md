@@ -19,6 +19,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Swipe up anywhere (or tap the arrow) to open. The drawer follows your finger and settles with a spring
 - Search (the keyboard can open automatically; off by default). It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
 - Suggested apps row, learned only on the phone; a dot marks newly installed apps you haven't opened
+- **Pause apps** from their long-press menu (15 minutes, an hour, the rest of today, or until you unpause), or on **schedules** (days and times, overnight supported). Paused apps are greyed out and ask before opening. It's a gentle speed bump: notifications still arrive, and Android doesn't let launchers truly suspend apps. For hard limits, the same menu links to Digital Wellbeing's app timer
 - Calculator: type `12*7+3` in search and tap the answer to copy it
 - Enter opens the top result. Optional "open when only one app matches", which never fires while you're deleting
 - If nothing matches: search the web or the app store

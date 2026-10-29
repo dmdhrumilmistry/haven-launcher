@@ -12,6 +12,8 @@ import androidx.lifecycle.viewModelScope
 import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.AppsSnapshot
+import app.haven.launcher.focus.PauseState
+import app.haven.launcher.focus.Pauses
 import app.haven.launcher.data.Calculator
 import app.haven.launcher.data.LaunchStats
 import app.haven.launcher.data.HomeItem
@@ -24,6 +26,7 @@ import app.haven.launcher.haven
 import app.haven.launcher.system.LauncherAccessibilityService
 import app.haven.launcher.system.SystemActions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -77,6 +80,7 @@ sealed interface LauncherPrompt {
     data class TurnOnWorkApps(val profile: Profile) : LauncherPrompt
     data object EnableLockService : LauncherPrompt
     data object NeedDefaultLauncher : LauncherPrompt
+    data class AppPaused(val item: AppItem, val state: PauseState) : LauncherPrompt
 }
 
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
@@ -110,6 +114,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     val query: StateFlow<String> = _query.asStateFlow()
 
     private val stats = application.haven.launchStats
+
+    /** Ticks at each minute boundary (and on resume) so pauses start and end on time. */
+    private val clock = MutableStateFlow(System.currentTimeMillis())
+
+    /** Apps paused right now, by manual pause or schedule. */
+    val pauses: StateFlow<Map<String, PauseState>> =
+        combine(clock, settings.map { it.pausedApps to it.pauseSchedules }.distinctUntilChanged()) { now, (manual, schedules) ->
+            Pauses.compute(manual, schedules, now)
+        }.distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     /** Unlocked with the device's screen lock; relocks whenever the launcher leaves the screen. */
     private val _hiddenUnlocked = MutableStateFlow(false)
@@ -146,11 +161,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /** Most-used apps (by recent habit), shown atop the drawer. Empty until there's some history. */
     val suggestions: StateFlow<List<AppItem>> =
-        combine(allApps, stats.entries, settings.map { it.showSuggestions }.distinctUntilChanged()) { apps, entries, show ->
+        combine(allApps, stats.entries, settings.map { it.showSuggestions }.distinctUntilChanged(), pauses) { apps, entries, show, paused ->
             if (!show || entries.isEmpty()) return@combine emptyList()
             val now = System.currentTimeMillis()
             apps.asSequence()
-                .filter { !it.isHidden && !it.isPaused && it.app.profile.isVisible && it.profileType != ProfileType.PRIVATE }
+                .filter { !it.isHidden && !it.isPaused && it.key !in paused && it.app.profile.isVisible && it.profileType != ProfileType.PRIVATE }
                 .map { it to LaunchStats.decayed(entries[it.key], now) }
                 .filter { it.second >= MIN_SUGGESTION_SCORE }
                 .sortedByDescending { it.second }
@@ -193,12 +208,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     val homePressed: SharedFlow<Unit> = _homePressed.asSharedFlow()
 
     init {
+        viewModelScope.launch {
+            while (true) {
+                val now = System.currentTimeMillis()
+                delay(60_000 - now % 60_000 + 50)
+                clock.value = System.currentTimeMillis()
+            }
+        }
         viewModelScope.launch { snapshot.collect { if (it.loaded) seedFavoritesOnce() } }
     }
 
     // ---- Lifecycle hooks from the activity ----
 
     fun onResume() {
+        clock.value = System.currentTimeMillis()
         val isDefault = SystemActions.isDefaultLauncher(app)
         // Becoming (or losing) the home app changes what we may do: shortcuts, pinned items, profiles.
         if (isDefault != _isDefaultLauncher.value || isDefault != snapshot.value.canUseShortcuts) appsRepo.reload()
@@ -224,6 +247,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             _prompt.value = LauncherPrompt.TurnOnWorkApps(item.app.profile)
             return false
         }
+        pauses.value[item.key]?.let { state ->
+            _prompt.value = LauncherPrompt.AppPaused(item, state)
+            return false
+        }
+        return launchNow(item, view, bounds)
+    }
+
+    /** Skips the pause check: for "Open anyway". */
+    fun launchNow(item: AppItem, view: View? = null, bounds: Rect? = null): Boolean {
         val ok = SystemActions.launchApp(app, item.app, view, bounds)
         if (ok) stats.recordLaunch(item.key) else appsRepo.reload()
         return ok
@@ -403,6 +435,16 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun reorderHome(orderedIds: List<String>) = settingsRepo.reorderHome(orderedIds)
+
+    fun pauseApp(item: AppItem, until: Long) {
+        settingsRepo.pauseApp(item.key, until)
+        clock.value = System.currentTimeMillis()
+    }
+
+    fun unpauseApp(item: AppItem) {
+        settingsRepo.unpauseApp(item.key)
+        clock.value = System.currentTimeMillis()
+    }
 
     companion object {
         private const val MAX_SUGGESTIONS = 5

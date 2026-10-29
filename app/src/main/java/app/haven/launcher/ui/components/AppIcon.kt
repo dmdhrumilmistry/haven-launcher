@@ -36,6 +36,9 @@ data class IconPrefs(val shape: IconShape = IconShape.SYSTEM, val themed: Boolea
 
 val LocalIconPrefs = compositionLocalOf { IconPrefs() }
 
+/** Keys of apps paused right now (Haven-level pause), so every place shows them greyed out. */
+val LocalPausedApps = compositionLocalOf { emptySet<String>() }
+
 @Composable
 private fun rememberIconStyle(size: Dp): IconStyle {
     val prefs = LocalIconPrefs.current
@@ -59,7 +62,8 @@ fun AppIcon(item: AppItem, size: Dp, modifier: Modifier = Modifier) {
     val bitmap by produceState(initialValue = cache.peek(key), key) {
         if (value == null) value = withContext(Dispatchers.IO) { cache.load(item.app, style) }
     }
-    IconImage(bitmap, size, dimmed = item.isPaused || item.app.isSuspended, modifier)
+    val paused = item.key in LocalPausedApps.current
+    IconImage(bitmap, size, dimmed = item.isPaused || item.app.isSuspended || paused, modifier)
 }
 
 @Composable
