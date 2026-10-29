@@ -55,6 +55,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.haven.launcher.BuildConfig
 import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.DoubleTapAction
@@ -275,7 +276,8 @@ fun LauncherScreen(vm: LauncherViewModel) {
                     }
                 }
             },
-            onDoubleTap = if (settings.doubleTapAction == DoubleTapAction.LOCK) ({ vm.lockScreen() }) else null,
+            // Settings imported from a "full" build may ask for this; ignore it where unsupported.
+            onDoubleTap = if (BuildConfig.LOCK_GESTURE && settings.doubleTapAction == DoubleTapAction.LOCK) ({ vm.lockScreen() }) else null,
             onBackgroundLongPress = { homeMenu = true },
         )
     }

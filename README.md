@@ -55,9 +55,18 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 | `EXPAND_STATUS_BAR` | Swipe down to open notifications |
 | `REQUEST_DELETE_PACKAGES` | The "Uninstall" action opens the system uninstall dialog |
 | `ACCESS_HIDDEN_PROFILES` | Android 15+: lets the home app show the private space entry |
-| Accessibility service (optional, off by default) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
+| Accessibility service (**full build only**, off until you enable it) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
 
 No internet, no storage, no contacts, no location.
+
+### Standard and full builds
+
+Each release has two APKs, signed with the same key (so you can switch between them):
+
+- **`haven-launcher-vX.Y.Z.apk` (standard, recommended):** everything except double-tap to lock.
+- **`haven-launcher-vX.Y.Z-full.apk`:** adds double-tap to lock, which needs an accessibility service. In several countries Google Play Protect blocks installing sideloaded apps that declare one ("App blocked to protect your device"), so use the standard build there.
+
+Locally: `./gradlew assembleStandardDebug` or `./gradlew assembleFullDebug`.
 
 ## Build
 
@@ -65,7 +74,7 @@ Needs JDK 17+ and the Android SDK (platform 36).
 
 ```bash
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# APKs: app/build/outputs/apk/{standard,full}/debug/
 ```
 
 Install it, then open **Haven Settings** and tap **Set as home app** (or pick Haven when you press Home).
@@ -73,7 +82,7 @@ Install it, then open **Haven Settings** and tap **Set as home app** (or pick Ha
 ## CI and releases
 
 - **Build** (`.github/workflows/build.yml`): every push to `main` and every pull request builds the debug APK and an unsigned release (so R8/minify problems show up early) and runs lint. The debug APK and lint report are attached to the run as artifacts.
-- **Release** (`.github/workflows/release.yml`): pushing a tag like `v1.2.3` builds a signed release APK, verifies the signature and publishes a GitHub release with the APK and its SHA-256. Tags with a suffix (`v1.3.0-beta.1`) become pre-releases.
+- **Release** (`.github/workflows/release.yml`): pushing a tag like `v1.2.3` builds a signed release APK, verifies the signature and publishes a GitHub release with both APKs (standard and full) and a SHA256SUMS.txt. Tags with a suffix (`v1.3.0-beta.1`) become pre-releases.
 - **Dependabot** keeps Gradle dependencies and GitHub Actions up to date weekly.
 
 Versions come from the tag: `v1.2.3` becomes version name `1.2.3` and version code `10203`, so every release can update the previous one. Minor and patch must stay between 0 and 99.

@@ -444,7 +444,7 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 { v -> repo.update { it.copy(swipeDownAction = v) } },
             )
         }
-        if (Build.VERSION.SDK_INT >= 28) {
+        if (BuildConfig.LOCK_GESTURE && Build.VERSION.SDK_INT >= 28) {
             item {
                 ChoiceRow(
                     stringResource(R.string.gesture_double_tap),

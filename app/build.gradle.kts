@@ -50,6 +50,22 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // "standard" has no accessibility service. Google Play Protect blocks sideloaded apps that
+    // declare one in several countries, so this is the default download. "full" adds the
+    // optional double-tap-to-lock gesture, which needs that service.
+    flavorDimensions += "features"
+    productFlavors {
+        create("standard") {
+            dimension = "features"
+            isDefault = true
+            buildConfigField("boolean", "LOCK_GESTURE", "false")
+        }
+        create("full") {
+            dimension = "features"
+            buildConfigField("boolean", "LOCK_GESTURE", "true")
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
