@@ -9,6 +9,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 **Home screen**
 - Clock and date (tap the clock for alarms, tap the date for the calendar), plus your next alarm if it's within 18 hours
 - **Widgets**: long-press empty space > Widgets. Long-press a widget to resize, reorder, reconfigure or remove it. Apps can also add widgets and shortcuts to the home screen themselves
+- Long-press and drag apps to rearrange them (or lock the layout to prevent accidents)
 - Favorite apps as a stock-Android style icon grid (default, 3 to 6 columns), names only, or icons with names. Align left, center or right; place them in the middle or at the bottom (easier to reach)
 - On first run it adds your default phone, messages, browser and camera, so the home screen isn't empty
 - Text color follows the wallpaper automatically (light or dark), with an optional wallpaper dim
@@ -17,13 +18,16 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 **App drawer**
 - Swipe up anywhere (or tap the arrow) to open. The drawer follows your finger and settles with a spring
 - Search (the keyboard can open automatically; off by default). It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
+- Suggested apps row, learned only on the phone; a dot marks newly installed apps you haven't opened
+- Calculator: type `12*7+3` in search and tap the answer to copy it
 - Enter opens the top result. Optional "open when only one app matches", which never fires while you're deleting
 - If nothing matches: search the web or the app store
 - List or grid, A-Z fast scroller (localized with ICU, so it works for Japanese, Chinese, etc.)
 - Long-press any app: its shortcuts, add to home, rename, hide, app info, uninstall
 
 **Work profile, private space and clones**
-- Separate **Personal / Work / Private** tabs (or merge work into the main list)
+- Separate **Personal / Work / Private** tabs: swipe between them or tap (or merge work into the main list)
+- **Clone app** opens the phone's own cloning screen where one exists (Android 14+ cloned apps, Samsung Dual Messenger, Xiaomi Dual apps). Android doesn't let third-party launchers create clones themselves; clones show in the drawer with a "Clone" tag
 - Work apps can be paused and resumed from the drawer. Paused apps show greyed out, and tapping one offers to turn work apps back on
 - Android 15+ private space: lock and unlock from the drawer. It never mixes into other lists, and it respects the system's "hide when locked" setting
 - Every non-personal app carries the system's own badge, so it always matches Settings
@@ -32,7 +36,8 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Theme (system, light, dark), Material You colors, text size, drawer background opacity
 - Icon size, icon shape (system, circle, squircle, rounded square), themed monochrome icons (Android 13+)
 - Gestures: swipe down for notifications or search, double-tap to lock (optional)
-- Hidden apps, renamed apps, reorderable home apps
+- Hidden apps, optionally locked with your fingerprint, face or screen lock
+- Renamed apps, reorderable home apps
 - Export and import all settings as a JSON file; reset to defaults
 
 ## Edge cases handled
