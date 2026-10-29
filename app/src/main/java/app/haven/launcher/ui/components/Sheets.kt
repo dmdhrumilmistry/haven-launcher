@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Home as HomeOutlined
@@ -92,6 +93,9 @@ fun AppActionsSheet(
     onDismiss: () -> Unit,
     /** Opens the phone's own app-cloning screen; null where the phone has none. */
     onClone: (() -> Unit)? = null,
+    /** Shown when the menu was opened from inside a folder. */
+    onRemoveFromFolder: (() -> Unit)? = null,
+    onCategories: (() -> Unit)? = null,
     /** Haven-level pause state, if paused right now. */
     pauseState: PauseState? = null,
     onPause: (() -> Unit)? = null,
@@ -166,7 +170,13 @@ fun AppActionsSheet(
                 stringResource(if (isFavorite) R.string.action_remove_from_home else R.string.action_add_to_home),
                 onToggleFavorite,
             )
+            if (onRemoveFromFolder != null) {
+                ActionRow(Icons.Filled.Close, stringResource(R.string.action_remove_from_folder), onRemoveFromFolder)
+            }
             ActionRow(Icons.Filled.Edit, stringResource(R.string.action_rename), onRename)
+            if (onCategories != null) {
+                ActionRow(Icons.Filled.List, stringResource(R.string.action_categories), onCategories)
+            }
             ActionRow(
                 Icons.Outlined.Lock,
                 stringResource(if (item.isHidden) R.string.action_unhide else R.string.action_hide),

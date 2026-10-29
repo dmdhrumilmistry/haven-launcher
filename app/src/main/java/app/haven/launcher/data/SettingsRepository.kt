@@ -98,8 +98,112 @@ class SettingsRepository(context: Context) {
     // Convenience edits used across the UI.
 
     fun toggleFavorite(appKey: String) = update { s ->
-        if (s.isFavorite(appKey)) s.copy(favorites = s.favorites.filterNot { it is HomeItem.App && it.appKey == appKey })
+        if (s.isFavorite(appKey)) s.copy(favorites = s.favorites.withoutApp(appKey))
         else s.copy(favorites = s.favorites + HomeItem.App(appKey))
+    }
+
+    // ---- Home folders ----
+
+    /**
+     * Drag-and-drop on the home screen: dropping an app onto another app makes a folder in the
+     * target's place; dropping it onto a folder adds it there.
+     */
+    fun mergeOnHome(draggedId: String, targetId: String, newFolderName: String) = update { s ->
+        val dragged = s.favorites.firstOrNull { it.id == draggedId } as? HomeItem.App ?: return@update s
+        val target = s.favorites.firstOrNull { it.id == targetId } ?: return@update s
+        val merged: HomeItem = when (target) {
+            is HomeItem.App -> HomeItem.Folder(newId(), newFolderName, listOf(target.appKey, dragged.appKey))
+            is HomeItem.Folder -> target.copy(apps = (target.apps + dragged.appKey).distinct())
+            else -> return@update s
+        }
+        s.copy(favorites = s.favorites.filterNot { it.id == draggedId }.map { if (it.id == targetId) merged else it })
+    }
+
+    /** Takes an app out of a home folder and puts it right after the folder. A folder of one dissolves. */
+    fun removeFromHomeFolder(folderId: String, appKey: String) = update { s ->
+        val list = s.favorites.toMutableList()
+        val index = list.indexOfFirst { it is HomeItem.Folder && it.folderId == folderId }
+        if (index < 0) return@update s
+        val folder = list[index] as HomeItem.Folder
+        val remaining = folder.apps - appKey
+        when (remaining.size) {
+            0 -> list.removeAt(index)
+            1 -> list[index] = HomeItem.App(remaining.first())
+            else -> list[index] = folder.copy(apps = remaining)
+        }
+        list.add((index + 1).coerceAtMost(list.size), HomeItem.App(appKey))
+        s.copy(favorites = list.distinctBy { it.id })
+    }
+
+    fun renameHomeFolder(folderId: String, name: String) = update { s ->
+        s.copy(favorites = s.favorites.map { if (it is HomeItem.Folder && it.folderId == folderId) it.copy(name = name.trim().take(40)) else it })
+    }
+
+    // ---- Drawer folders ----
+
+    /** Drag-and-drop in the drawer: onto an app makes a folder, onto a folder adds to it. */
+    fun mergeInDrawer(draggedKey: String, targetAppKey: String?, targetFolderId: String?, newFolderName: String) = update { s ->
+        if (draggedKey == targetAppKey) return@update s
+        // An app lives in at most one drawer folder.
+        val cleaned = s.drawerFolders.map { it.copy(apps = it.apps - draggedKey) }
+        val folders = when {
+            targetFolderId != null -> cleaned.map { if (it.id == targetFolderId) it.copy(apps = it.apps + draggedKey) else it }
+            targetAppKey != null -> {
+                val existing = cleaned.firstOrNull { targetAppKey in it.apps }
+                if (existing != null) cleaned.map { if (it.id == existing.id) it.copy(apps = it.apps + draggedKey) else it }
+                else cleaned + DrawerFolder(newId(), newFolderName, listOf(targetAppKey, draggedKey))
+            }
+            else -> return@update s
+        }
+        s.copy(drawerFolders = folders.filter { it.apps.size >= 2 })
+    }
+
+    fun removeFromDrawerFolder(folderId: String, appKey: String) = update { s ->
+        s.copy(drawerFolders = s.drawerFolders.map { if (it.id == folderId) it.copy(apps = it.apps - appKey) else it }.filter { it.apps.size >= 2 })
+    }
+
+    fun renameDrawerFolder(folderId: String, name: String) = update { s ->
+        s.copy(drawerFolders = s.drawerFolders.map { if (it.id == folderId) it.copy(name = name.trim().take(40)) else it })
+    }
+
+    // ---- Categories ----
+
+    fun createCategory(name: String, apps: Set<String> = emptySet()): String {
+        val id = newId()
+        update { s -> s.copy(categories = s.categories + AppCategory(id, name.trim().take(40), apps)) }
+        return id
+    }
+
+    /** Adds suggested categories, merging into existing ones with the same name. */
+    fun addCategories(suggested: List<Pair<String, Set<String>>>) = update { s ->
+        var list = s.categories
+        for ((name, apps) in suggested) {
+            val existing = list.firstOrNull { it.name.equals(name, ignoreCase = true) }
+            list = if (existing != null) list.map { if (it.id == existing.id) it.copy(apps = it.apps + apps) else it }
+            else list + AppCategory(newId(), name, apps)
+        }
+        s.copy(categories = list)
+    }
+
+    fun setAppInCategory(categoryId: String, appKey: String, inCategory: Boolean) = update { s ->
+        s.copy(categories = s.categories.map {
+            if (it.id != categoryId) it else it.copy(apps = if (inCategory) it.apps + appKey else it.apps - appKey)
+        })
+    }
+
+    fun renameCategory(id: String, name: String) = update { s ->
+        s.copy(categories = s.categories.map { if (it.id == id) it.copy(name = name.trim().take(40)) else it })
+    }
+
+    fun deleteCategory(id: String) = update { s -> s.copy(categories = s.categories.filterNot { it.id == id }) }
+
+    fun moveCategory(id: String, delta: Int) = update { s ->
+        val list = s.categories.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = from + delta
+        if (from < 0 || to !in list.indices) return@update s
+        list.add(to, list.removeAt(from))
+        s.copy(categories = list)
     }
 
     fun addHomeItem(item: HomeItem) = update { s ->
@@ -129,7 +233,7 @@ class SettingsRepository(context: Context) {
             // A hidden app shouldn't keep a home-screen slot either; that would defeat the point.
             s.copy(
                 hiddenApps = s.hiddenApps + appKey,
-                favorites = s.favorites.filterNot { it is HomeItem.App && it.appKey == appKey },
+                favorites = s.favorites.withoutApp(appKey),
             )
         } else {
             s.copy(hiddenApps = s.hiddenApps - appKey)
@@ -141,6 +245,22 @@ class SettingsRepository(context: Context) {
         if (clean.isNullOrEmpty()) s.copy(customLabels = s.customLabels - appKey)
         else s.copy(customLabels = s.customLabels + (appKey to clean))
     }
+
+    /** Removes an app from the home screen, including from inside home folders. */
+    private fun List<HomeItem>.withoutApp(appKey: String): List<HomeItem> = mapNotNull { item ->
+        when {
+            item is HomeItem.App && item.appKey == appKey -> null
+            item is HomeItem.Folder && appKey in item.apps -> {
+                val rest = item.apps - appKey
+                when (rest.size) {
+                    0 -> null
+                    1 -> HomeItem.App(rest.first())
+                    else -> item.copy(apps = rest)
+                }
+            }
+            else -> item
+        }
+    }.distinctBy { it.id }
 
     companion object {
         private const val TAG = "HavenSettings"

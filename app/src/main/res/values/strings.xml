@@ -14,7 +14,7 @@
     <string name="profile_clone">Clone</string>
 
     <!-- Home -->
-    <string name="home_empty_hint">Your favorite apps go here. Long-press any app in the drawer and choose \"Add to home\".</string>
+    <string name="home_empty_hint">Your favorite apps go here. Long-press any app in the drawer and choose \"Add to home\". Drag one app onto another to make a folder.</string>
     <string name="open_app_drawer">All apps</string>
     <string name="open_alarms">Open alarms</string>
     <string name="open_calendar">Open calendar</string>
@@ -152,6 +152,31 @@
     <string name="days_every_day">Every day</string>
     <string name="days_weekdays">Weekdays</string>
     <string name="days_weekends">Weekends</string>
+
+    <!-- Folders and categories -->
+    <string name="folder_default">Folder</string>
+    <string name="folder_name">Folder name</string>
+    <string name="folder_rename">Rename folder</string>
+    <string name="open_folder">Open %1$s</string>
+    <string name="action_remove_from_folder">Remove from folder</string>
+    <string name="action_categories">Categories</string>
+    <string name="action_done">Done</string>
+    <string name="action_delete">Delete</string>
+    <string name="categories_for">Categories for %1$s</string>
+    <string name="categories_empty_hint">Categories become tabs in your app drawer. Name one below to start.</string>
+    <string name="category_default">Category</string>
+    <string name="category_new">New category</string>
+    <string name="settings_categories">Categories</string>
+    <string name="categories_summary_none">Your own tabs in the app drawer, like Social or Games</string>
+    <string name="categories_hint">Each category is a tab in the app drawer. Add apps from their long-press menu > Categories. Apps stay in the main list too.</string>
+    <string name="categories_suggest">Suggest from app types</string>
+    <string name="categories_suggest_none">No app types to suggest from</string>
+    <string name="category_delete_title">Delete %1$s?</string>
+    <string name="category_delete_body">The apps stay installed and in your main list.</string>
+    <string name="no_apps_body_category">Add apps from their long-press menu > Categories.</string>
+    <string name="setting_sort">Sort apps</string>
+    <string name="sort_alphabetical">A to Z</string>
+    <string name="sort_most_used">Most used first</string>
 
     <!-- Rename -->
     <string name="rename_title">Rename app</string>
@@ -296,6 +321,14 @@
     <plurals name="schedule_apps">
         <item quantity="one">%d app</item>
         <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="folder_apps">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="categories_suggested">
+        <item quantity="one">Added %d category</item>
+        <item quantity="other">Added %d categories</item>
     </plurals>
     <plurals name="hidden_count">
         <item quantity="one">%d app hidden</item>

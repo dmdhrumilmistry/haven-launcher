@@ -2,6 +2,7 @@ package app.haven.launcher.ui
 
 import android.app.Application
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.ShortcutInfo
 import android.graphics.Rect
 import android.icu.text.AlphabeticIndex
@@ -12,6 +13,9 @@ import androidx.lifecycle.viewModelScope
 import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.AppsSnapshot
+import app.haven.launcher.data.AppCategory
+import app.haven.launcher.data.DrawerFolder
+import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.focus.PauseState
 import app.haven.launcher.focus.Pauses
 import app.haven.launcher.data.Calculator
@@ -44,7 +48,43 @@ import kotlinx.coroutines.withContext
 import java.text.Collator
 import java.util.Locale
 
-enum class DrawerTab { PERSONAL, WORK, PRIVATE, HIDDEN }
+/** A page in the app drawer: a profile, the hidden apps, or one of the user's categories. */
+sealed interface DrawerTab {
+    data object Personal : DrawerTab
+    data object Work : DrawerTab
+    data object Private : DrawerTab
+    data object Hidden : DrawerTab
+    data class Category(val id: String) : DrawerTab
+
+    companion object {
+        val PERSONAL: DrawerTab = Personal
+        val WORK: DrawerTab = Work
+        val PRIVATE: DrawerTab = Private
+        val HIDDEN: DrawerTab = Hidden
+    }
+}
+
+/** One cell in the drawer: an app, or a folder of apps. */
+sealed interface DrawerEntry {
+    val key: String
+    val label: String
+    val section: String
+
+    data class App(val item: AppItem) : DrawerEntry {
+        override val key get() = item.key
+        override val label get() = item.label
+        override val section get() = item.section
+    }
+
+    data class Folder(
+        val folder: DrawerFolder,
+        val apps: List<AppItem>,
+        override val label: String,
+        override val section: String,
+    ) : DrawerEntry {
+        override val key get() = "folder:${folder.id}"
+    }
+}
 
 sealed interface HomeEntry {
     val id: String
@@ -56,11 +96,18 @@ sealed interface HomeEntry {
     data class Shortcut(val item: HomeItem.Shortcut, val info: ShortcutInfo) : HomeEntry {
         override val id get() = item.id
     }
+
+    data class Folder(val item: HomeItem.Folder, val apps: List<AppItem>, val label: String) : HomeEntry {
+        override val id get() = item.id
+    }
 }
 
 data class DrawerModel(
     val tabs: List<DrawerTab> = listOf(DrawerTab.PERSONAL),
-    val appsByTab: Map<DrawerTab, List<AppItem>> = emptyMap(),
+    val entriesByTab: Map<DrawerTab, List<DrawerEntry>> = emptyMap(),
+    val categoryNames: Map<String, String> = emptyMap(),
+    /** Alphabetical order: the A-Z scroller makes sense. */
+    val alphabetical: Boolean = true,
     val profileByTab: Map<DrawerTab, Profile> = emptyMap(),
     /** Work profile when it's merged into the main list (tabs turned off), for the paused banner. */
     val mergedWorkProfile: Profile? = null,
@@ -87,6 +134,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val app = application
     private val settingsRepo = application.haven.settings
     private val appsRepo = application.haven.apps
+    private val launchStats = application.haven.launchStats
 
     val settings: StateFlow<LauncherSettings> = settingsRepo.settings
     val snapshot: StateFlow<AppsSnapshot> = appsRepo.snapshot
@@ -104,9 +152,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         combine(
             allApps,
             snapshot,
-            settings.map { it.separateProfileTabs to it.showHiddenTab }.distinctUntilChanged(),
-        ) { apps, snap, (separate, hiddenTab) ->
-            buildDrawer(apps, snap, separate, hiddenTab)
+            settings.map {
+                DrawerPrefs(it.separateProfileTabs, it.showHiddenTab, it.drawerFolders, it.categories, it.drawerSort)
+            }.distinctUntilChanged(),
+            launchStats.entries,
+        ) { apps, snap, prefs, stats ->
+            buildDrawer(apps, snap, prefs, stats)
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, DrawerModel())
 
@@ -192,6 +243,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                     // comes back (e.g. SD card remounted) but don't show a dead slot.
                     is HomeItem.App -> byKey[fav.appKey]?.takeIf { it.app.profile.isVisible }?.let { HomeEntry.App(it) }
                     is HomeItem.Shortcut -> snap.pinnedShortcuts[fav.id]?.let { HomeEntry.Shortcut(fav, it) }
+                    is HomeItem.Folder -> fav.apps
+                        .mapNotNull { k -> byKey[k]?.takeIf { !it.isHidden && it.app.profile.isVisible } }
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { HomeEntry.Folder(fav, it, fav.name.ifBlank { app.getString(R.string.folder_default) }) }
                 }
             }
         }.flowOn(Dispatchers.Default)
@@ -378,11 +433,20 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return if (first.isLetter()) first.uppercase() else "#"
     }
 
-    private fun buildDrawer(apps: List<AppItem>, snap: AppsSnapshot, separate: Boolean, hiddenTab: Boolean): DrawerModel {
+    private data class DrawerPrefs(
+        val separate: Boolean,
+        val hiddenTab: Boolean,
+        val folders: List<DrawerFolder>,
+        val categories: List<AppCategory>,
+        val sort: DrawerSort,
+    )
+
+    private fun buildDrawer(apps: List<AppItem>, snap: AppsSnapshot, prefs: DrawerPrefs, stats: Map<String, LaunchStats.Entry>): DrawerModel {
         val visibleProfiles = snap.profiles.filter { it.isVisible }
         val work = visibleProfiles.firstOrNull { it.type == ProfileType.WORK }
         val private = visibleProfiles.firstOrNull { it.type == ProfileType.PRIVATE }
         val personal = visibleProfiles.firstOrNull { it.type == ProfileType.PERSONAL }
+        val separate = prefs.separate
 
         fun tabOf(type: ProfileType): DrawerTab = when (type) {
             ProfileType.PERSONAL, ProfileType.CLONE -> DrawerTab.PERSONAL
@@ -390,19 +454,72 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             // Private space never mixes into other lists, even with tabs off. That's its point.
             ProfileType.PRIVATE -> DrawerTab.PRIVATE
         }
+
+        val shown = apps.filter { !it.isHidden && it.app.profile.isVisible }
+        val byKey = shown.associateBy { it.key }
         // Hidden apps from any visible profile except private space (which already has its own lock).
         val hidden = apps.filter { it.isHidden && it.app.profile.isVisible && it.profileType != ProfileType.PRIVATE }
 
+        // Ordering: alphabetical (ICU collation) or most used first.
+        val locale = Locale.getDefault()
+        val collator = Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
+        val index = try {
+            AlphabeticIndex<Any>(locale).addLabels(Locale.ENGLISH).buildImmutableIndex()
+        } catch (e: Exception) {
+            null
+        }
+        val now = System.currentTimeMillis()
+        fun score(entry: DrawerEntry): Double = when (entry) {
+            is DrawerEntry.App -> LaunchStats.decayed(stats[entry.key], now)
+            is DrawerEntry.Folder -> entry.apps.maxOfOrNull { LaunchStats.decayed(stats[it.key], now) } ?: 0.0
+        }
+        val alphabetical = prefs.sort == DrawerSort.ALPHABETICAL
+        fun List<DrawerEntry>.ordered(): List<DrawerEntry> {
+            val byName = Comparator<DrawerEntry> { a, b -> collator.compare(a.label, b.label) }
+            return if (alphabetical) sortedWith(byName) else sortedWith(compareByDescending<DrawerEntry> { score(it) }.then(byName))
+        }
+
+        // Folders: valid with at least two apps we can show; their apps leave the main lists.
+        val folderLabel = app.getString(R.string.folder_default)
+        val folders = prefs.folders.mapNotNull { f ->
+            val members = f.apps.mapNotNull { byKey[it] }
+            if (members.size < 2) return@mapNotNull null
+            val label = f.name.ifBlank { folderLabel }
+            DrawerEntry.Folder(f, members, label, sectionOf(index, label))
+        }
+        val inFolders = folders.flatMap { f -> f.apps.map { it.key } }.toSet()
+
+        val categoryTabs = prefs.categories.map { DrawerTab.Category(it.id) }
         val tabs = buildList {
             add(DrawerTab.PERSONAL)
             if (work != null && separate) add(DrawerTab.WORK)
             if (private != null) add(DrawerTab.PRIVATE)
-            if (hiddenTab && hidden.isNotEmpty()) add(DrawerTab.HIDDEN)
+            addAll(categoryTabs)
+            if (prefs.hiddenTab && hidden.isNotEmpty()) add(DrawerTab.HIDDEN)
         }
-        val grouped = apps.filter { !it.isHidden && it.app.profile.isVisible }.groupBy { tabOf(it.profileType) }
+
+        val profileEntries: Map<DrawerTab, List<DrawerEntry>> = shown
+            .filter { it.key !in inFolders }
+            .groupBy { tabOf(it.profileType) }
+            .mapValues { (_, list) -> list.map { DrawerEntry.App(it) } }
+        // A folder lives in the tab of its first app.
+        val folderEntries = folders.groupBy { tabOf(it.apps.first().profileType) }
+
+        val entries = tabs.associateWith { tab ->
+            when (tab) {
+                DrawerTab.Hidden -> hidden.map { DrawerEntry.App(it) }.ordered()
+                is DrawerTab.Category -> {
+                    val members = prefs.categories.firstOrNull { it.id == tab.id }?.apps.orEmpty()
+                    shown.filter { it.key in members }.map { DrawerEntry.App(it) }.ordered()
+                }
+                else -> (profileEntries[tab].orEmpty() + folderEntries[tab].orEmpty()).ordered()
+            }
+        }
         return DrawerModel(
             tabs = tabs,
-            appsByTab = tabs.associateWith { if (it == DrawerTab.HIDDEN) hidden else grouped[it].orEmpty() },
+            entriesByTab = entries,
+            categoryNames = prefs.categories.associate { it.id to it.name },
+            alphabetical = alphabetical,
             profileByTab = buildMap {
                 personal?.let { put(DrawerTab.PERSONAL, it) }
                 if (separate) work?.let { put(DrawerTab.WORK, it) }
@@ -410,6 +527,47 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             },
             mergedWorkProfile = work.takeIf { !separate },
         )
+    }
+
+    // ---- Folders and categories ----
+
+    /** A name for a new folder: the app type both apps share (e.g. "Social"), otherwise blank. */
+    fun folderNameFor(keys: List<String>): String {
+        val apps = keys.mapNotNull { k -> allApps.value.firstOrNull { it.key == k } }
+        val category = apps.map { it.app.appCategory }.distinct().singleOrNull() ?: return ""
+        if (category < 0) return ""
+        return ApplicationInfo.getCategoryTitle(app, category)?.toString().orEmpty()
+    }
+
+    fun dropOnHome(draggedId: String, targetId: String) {
+        val target = settings.value.favorites.firstOrNull { it.id == targetId }
+        val dragged = settings.value.favorites.firstOrNull { it.id == draggedId } as? HomeItem.App ?: return
+        val name = if (target is HomeItem.App) folderNameFor(listOf(target.appKey, dragged.appKey)) else ""
+        settingsRepo.mergeOnHome(draggedId, targetId, name)
+    }
+
+    fun dropInDrawer(dragged: AppItem, target: DrawerEntry) {
+        when (target) {
+            is DrawerEntry.App -> settingsRepo.mergeInDrawer(dragged.key, target.key, null, folderNameFor(listOf(target.key, dragged.key)))
+            is DrawerEntry.Folder -> settingsRepo.mergeInDrawer(dragged.key, null, target.folder.id, "")
+        }
+    }
+
+    /**
+     * Creates categories from the app types apps declare to Android (Games, Social, Maps, ...).
+     * @return how many categories were created or extended.
+     */
+    fun suggestCategories(): Int {
+        val groups = allApps.value
+            .filter { !it.isHidden && it.app.profile.isVisible && it.app.appCategory >= 0 }
+            .groupBy { it.app.appCategory }
+            .filterValues { it.size >= 2 }
+            .mapNotNull { (cat, list) ->
+                val name = ApplicationInfo.getCategoryTitle(app, cat)?.toString() ?: return@mapNotNull null
+                name to list.map { it.key }.toSet()
+            }
+        if (groups.isNotEmpty()) settingsRepo.addCategories(groups)
+        return groups.size
     }
 
     /** First run: put the phone, messages, browser and camera on the home screen so it isn't empty. */
