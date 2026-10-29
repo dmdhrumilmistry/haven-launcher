@@ -8,6 +8,8 @@
 
     <!-- Swipe down to open the notification shade. Normal permission, granted at install. -->
     <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- Fingerprint/face prompt for locked hidden apps. Normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <!-- Lets the "Uninstall" action open the system uninstall dialog. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Android 15+: lets the default home app see the private space so it can show a lock/unlock entry. -->
@@ -44,6 +46,17 @@
         </intent>
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+        <!-- Phone makers' own app-cloning screens, for "Clone app". -->
+        <intent>
+            <action android:name="android.settings.MANAGE_CLONED_APPS_SETTINGS" />
+        </intent>
+        <package android:name="com.android.settings" />
+        <package android:name="com.samsung.android.da.daagent" />
+        <package android:name="com.miui.securitycore" />
+        <!-- Apps that only offer widgets (no launcher icon) must still show up in the widget picker. -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -107,21 +120,8 @@
             android:theme="@style/Theme.Haven.Dialog">
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+                <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
-
-        <!-- Optional. Only used for "double-tap to lock" and as a notification-shade fallback. -->
-        <service
-            android:name=".system.LauncherAccessibilityService"
-            android:exported="false"
-            android:label="@string/a11y_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service" />
-        </service>
     </application>
 </manifest>

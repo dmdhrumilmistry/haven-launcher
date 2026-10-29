@@ -3,13 +3,13 @@ package app.haven.launcher.ui.home
 import android.graphics.Rect
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -82,6 +83,7 @@ class HomeCallbacks(
     val onDragEnd: (velocityY: Float, totalDy: Float) -> Unit,
     val onDoubleTap: (() -> Unit)?,
     val onBackgroundLongPress: () -> Unit,
+    val onReorder: (List<String>) -> Unit,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -92,6 +94,8 @@ fun HomeScreen(
     contentColor: Color,
     callbacks: HomeCallbacks,
     modifier: Modifier = Modifier,
+    /** Widgets, if any. Gets a modifier that bounds its height so app icons always stay visible. */
+    widgetContent: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val cb by rememberUpdatedState(callbacks)
@@ -168,12 +172,23 @@ fun HomeScreen(
             Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
-                .padding(horizontal = 28.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = horizontal,
         ) {
             if (settings.showClock || settings.showDate) {
                 Spacer(Modifier.height(32.dp))
                 ClockBlock(settings, contentColor, shadow, textAlign, horizontal)
+            }
+
+            if (widgetContent != null) {
+                Spacer(Modifier.height(20.dp))
+                // Takes what it needs, up to about half the free space; scrolls beyond that.
+                widgetContent(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                )
             }
 
             // Favorites take the remaining space, centred or anchored low for one-handed reach.
@@ -195,16 +210,22 @@ fun HomeScreen(
                         style = TextStyle(fontSize = 15.sp, shadow = shadow, textAlign = textAlign),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                } else when (settings.homeStyle) {
-                    HomeStyle.DOCK -> FlowRow(
-                        favoritesModifier,
-                        horizontalArrangement = Arrangement.spacedBy(20.dp, horizontal),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
-                    ) {
-                        entries.forEach { entry -> DockItem(entry, settings, contentColor, shadow, cb) }
-                    }
-                    else -> Column(favoritesModifier, horizontalAlignment = horizontal) {
-                        entries.forEach { entry -> ListItem(entry, settings, contentColor, shadow, cb) }
+                } else {
+                    // Stock-Android style grid (equal columns across the width), or a single
+                    // column for the list styles. Long-press and drag to rearrange.
+                    val grid = settings.homeStyle == HomeStyle.DOCK
+                    ReorderableHomeGrid(
+                        entries = entries,
+                        columns = if (grid) settings.homeColumns.coerceIn(3, 6) else 1,
+                        alignment = settings.homeAlignment,
+                        rowSpacing = if (grid) 16.dp else 0.dp,
+                        reorderEnabled = !settings.lockHomeLayout,
+                        onReorder = cb.onReorder,
+                        onMenu = cb.onLongPress,
+                        modifier = favoritesModifier,
+                    ) { entry, gestures, dragging ->
+                        if (grid) DockItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
+                        else ListItem(entry, settings, contentColor, shadow, cb, gestures, dragging)
                     }
                 }
             }
@@ -288,25 +309,29 @@ private fun HomeEntry.label(): String = when (this) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ListItem(entry: HomeEntry, settings: LauncherSettings, color: Color, shadow: Shadow, cb: HomeCallbacks) {
+private fun ListItem(
+    entry: HomeEntry,
+    settings: LauncherSettings,
+    color: Color,
+    shadow: Shadow,
+    cb: HomeCallbacks,
+    gestures: Modifier,
+    dragging: Boolean,
+) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
-    val haptics = LocalHapticFeedback.current
     val label = entry.label()
     val dimmed = entry is HomeEntry.App && (entry.item.isPaused || entry.item.app.isSuspended)
     val moreLabel = stringResource(R.string.more_options)
     Row(
         Modifier
             .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
-                role = Role.Button,
-                onLongClickLabel = moreLabel,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    cb.onLongPress(entry)
-                },
-                onClick = { cb.onOpen(entry, bounds) },
-            )
-            .semantics { customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(entry); true }) }
+            .clickable(role = Role.Button, enabled = !dragging) { cb.onOpen(entry, bounds) }
+            // After clickable, so it sees touches first and can stop a tap firing after a long-press.
+            .then(gestures)
+            .semantics {
+                onLongClick(moreLabel) { cb.onLongPress(entry); true }
+                customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(entry); true })
+            }
             .onGloballyPositioned { bounds = it.windowRect() }
             .padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -327,26 +352,29 @@ private fun ListItem(entry: HomeEntry, settings: LauncherSettings, color: Color,
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DockItem(entry: HomeEntry, settings: LauncherSettings, color: Color, shadow: Shadow, cb: HomeCallbacks) {
+private fun DockItem(
+    entry: HomeEntry,
+    settings: LauncherSettings,
+    color: Color,
+    shadow: Shadow,
+    cb: HomeCallbacks,
+    gestures: Modifier,
+    dragging: Boolean,
+) {
     var bounds by remember { mutableStateOf<Rect?>(null) }
-    val haptics = LocalHapticFeedback.current
     val label = entry.label()
     val moreLabel = stringResource(R.string.more_options)
     Column(
         Modifier
-            .width(settings.iconSize.dp.dp + 20.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
             .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(
-                role = Role.Button,
-                onClickLabel = label,
-                onLongClickLabel = moreLabel,
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    cb.onLongPress(entry)
-                },
-                onClick = { cb.onOpen(entry, bounds) },
-            )
-            .semantics { customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(entry); true }) }
+            .clickable(role = Role.Button, enabled = !dragging, onClickLabel = label) { cb.onOpen(entry, bounds) }
+            .then(gestures)
+            .semantics {
+                onLongClick(moreLabel) { cb.onLongPress(entry); true }
+                customActions = listOf(CustomAccessibilityAction(moreLabel) { cb.onLongPress(entry); true })
+            }
             .onGloballyPositioned { bounds = it.windowRect() }
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -140,6 +140,7 @@ class AppRepository(
                     systemLabel = info.label?.toString()?.trim().orEmpty().ifEmpty { component.packageName },
                     isSystemApp = isSystem,
                     isSuspended = appInfo.flags and ApplicationInfo.FLAG_SUSPENDED != 0,
+                    installedAt = info.firstInstallTime,
                     info = info,
                 )
             }

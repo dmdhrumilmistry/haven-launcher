@@ -8,21 +8,26 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 
 **Home screen**
 - Clock and date (tap the clock for alarms, tap the date for the calendar), plus your next alarm if it's within 18 hours
-- Favorite apps as names, icons with names, or an icon grid. Align left, center or right; place them in the middle or at the bottom (easier to reach)
+- **Widgets**: long-press empty space > Widgets. Long-press a widget to resize, reorder, reconfigure or remove it. Apps can also add widgets and shortcuts to the home screen themselves
+- Long-press and drag apps to rearrange them (or lock the layout to prevent accidents)
+- Favorite apps as a stock-Android style icon grid (default, 3 to 6 columns), names only, or icons with names. Align left, center or right; place them in the middle or at the bottom (easier to reach)
 - On first run it adds your default phone, messages, browser and camera, so the home screen isn't empty
 - Text color follows the wallpaper automatically (light or dark), with an optional wallpaper dim
 - Supports pinned shortcuts from other apps (for example, a browser's "Add to home screen")
 
 **App drawer**
 - Swipe up anywhere (or tap the arrow) to open. The drawer follows your finger and settles with a spring
-- Search opens with the keyboard ready. It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
+- Search (the keyboard can open automatically; off by default). It ignores accents, matches initials ("gm" finds Google Maps) and camel case ("app" finds WhatsApp), and still finds renamed apps by their original name
+- Suggested apps row, learned only on the phone; a dot marks newly installed apps you haven't opened
+- Calculator: type `12*7+3` in search and tap the answer to copy it
 - Enter opens the top result. Optional "open when only one app matches", which never fires while you're deleting
 - If nothing matches: search the web or the app store
 - List or grid, A-Z fast scroller (localized with ICU, so it works for Japanese, Chinese, etc.)
 - Long-press any app: its shortcuts, add to home, rename, hide, app info, uninstall
 
 **Work profile, private space and clones**
-- Separate **Personal / Work / Private** tabs (or merge work into the main list)
+- Separate **Personal / Work / Private** tabs: swipe between them or tap (or merge work into the main list)
+- **Clone app** opens the phone's own cloning screen where one exists (Android 14+ cloned apps, Samsung Dual Messenger, Xiaomi Dual apps). Android doesn't let third-party launchers create clones themselves; clones show in the drawer with a "Clone" tag
 - Work apps can be paused and resumed from the drawer. Paused apps show greyed out, and tapping one offers to turn work apps back on
 - Android 15+ private space: lock and unlock from the drawer. It never mixes into other lists, and it respects the system's "hide when locked" setting
 - Every non-personal app carries the system's own badge, so it always matches Settings
@@ -31,7 +36,8 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Theme (system, light, dark), Material You colors, text size, drawer background opacity
 - Icon size, icon shape (system, circle, squircle, rounded square), themed monochrome icons (Android 13+)
 - Gestures: swipe down for notifications or search, double-tap to lock (optional)
-- Hidden apps, renamed apps, reorderable home apps
+- Hidden apps, optionally locked with your fingerprint, face or screen lock
+- Renamed apps, reorderable home apps
 - Export and import all settings as a JSON file; reset to defaults
 
 ## Edge cases handled
@@ -54,10 +60,20 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 |---|---|
 | `EXPAND_STATUS_BAR` | Swipe down to open notifications |
 | `REQUEST_DELETE_PACKAGES` | The "Uninstall" action opens the system uninstall dialog |
+| `USE_BIOMETRIC` | Fingerprint or face check for locked hidden apps (your PIN works too) |
 | `ACCESS_HIDDEN_PROFILES` | Android 15+: lets the home app show the private space entry |
-| Accessibility service (optional, off by default) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
+| Accessibility service (**full build only**, off until you enable it) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
 
 No internet, no storage, no contacts, no location.
+
+### Standard and full builds
+
+Each release has two APKs, signed with the same key (so you can switch between them):
+
+- **`haven-launcher-vX.Y.Z.apk` (standard, recommended):** everything except double-tap to lock.
+- **`haven-launcher-vX.Y.Z-full.apk`:** adds double-tap to lock, which needs an accessibility service. In several countries Google Play Protect blocks installing sideloaded apps that declare one ("App blocked to protect your device"), so use the standard build there.
+
+Locally: `./gradlew assembleStandardDebug` or `./gradlew assembleFullDebug`.
 
 ## Build
 
@@ -65,7 +81,7 @@ Needs JDK 17+ and the Android SDK (platform 36).
 
 ```bash
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# APKs: app/build/outputs/apk/{standard,full}/debug/
 ```
 
 Install it, then open **Haven Settings** and tap **Set as home app** (or pick Haven when you press Home).
@@ -73,7 +89,7 @@ Install it, then open **Haven Settings** and tap **Set as home app** (or pick Ha
 ## CI and releases
 
 - **Build** (`.github/workflows/build.yml`): every push to `main` and every pull request builds the debug APK and an unsigned release (so R8/minify problems show up early) and runs lint. The debug APK and lint report are attached to the run as artifacts.
-- **Release** (`.github/workflows/release.yml`): pushing a tag like `v1.2.3` builds a signed release APK, verifies the signature and publishes a GitHub release with the APK and its SHA-256. Tags with a suffix (`v1.3.0-beta.1`) become pre-releases.
+- **Release** (`.github/workflows/release.yml`): pushing a tag like `v1.2.3` builds a signed release APK, verifies the signature and publishes a GitHub release with both APKs (standard and full) and a SHA256SUMS.txt. Tags with a suffix (`v1.3.0-beta.1`) become pre-releases.
 - **Dependabot** keeps Gradle dependencies and GitHub Actions up to date weekly.
 
 Versions come from the tag: `v1.2.3` becomes version name `1.2.3` and version code `10203`, so every release can update the previous one. Minor and patch must stay between 0 and 99.

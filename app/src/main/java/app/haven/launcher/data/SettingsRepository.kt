@@ -48,12 +48,33 @@ class SettingsRepository(context: Context) {
             return false
         }
         if (!json.has("version")) return false
+        // Widget ids only mean something on the device that created them, so keep the current ones.
         val imported = LauncherSettings.fromJson(json).copy(favoritesSeeded = true)
-        update { imported }
+        update { imported.copy(widgets = it.widgets) }
         return true
     }
 
-    fun resetAll() = update { LauncherSettings(favoritesSeeded = true) }
+    /** Widgets stay: removing them silently would be surprising, and they're removed one tap away. */
+    fun resetAll() = update { LauncherSettings(favoritesSeeded = true, widgets = it.widgets) }
+
+    fun addWidget(widget: HomeWidget) = update { s ->
+        if (s.widgets.any { it.id == widget.id }) s else s.copy(widgets = s.widgets + widget)
+    }
+
+    fun removeWidget(id: Int) = update { s -> s.copy(widgets = s.widgets.filterNot { it.id == id }) }
+
+    fun resizeWidget(id: Int, rows: Int) = update { s ->
+        s.copy(widgets = s.widgets.map { if (it.id == id) it.copy(rows = rows.coerceIn(1, 6)) else it })
+    }
+
+    fun moveWidget(id: Int, delta: Int) = update { s ->
+        val list = s.widgets.toMutableList()
+        val from = list.indexOfFirst { it.id == id }
+        val to = from + delta
+        if (from < 0 || to !in list.indices) return@update s
+        list.add(to, list.removeAt(from))
+        s.copy(widgets = list)
+    }
 
     // Convenience edits used across the UI.
 
@@ -75,6 +96,13 @@ class SettingsRepository(context: Context) {
         if (from < 0 || to !in list.indices) return@update s
         list.add(to, list.removeAt(from))
         s.copy(favorites = list)
+    }
+
+    /** Applies a new home order from drag and drop. Ids not in [orderedIds] keep their relative order at the end. */
+    fun reorderHome(orderedIds: List<String>) = update { s ->
+        val byId = s.favorites.associateBy { it.id }
+        val ordered = orderedIds.mapNotNull { byId[it] }
+        s.copy(favorites = ordered + s.favorites.filterNot { it.id in orderedIds })
     }
 
     fun setHidden(appKey: String, hidden: Boolean) = update { s ->

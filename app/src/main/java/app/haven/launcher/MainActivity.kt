@@ -11,12 +11,17 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import app.haven.launcher.ui.LauncherScreen
 import app.haven.launcher.ui.LauncherViewModel
+import app.haven.launcher.widgets.HomeWidgets
 
 class MainActivity : ComponentActivity() {
     private val vm: LauncherViewModel by viewModels()
+    private lateinit var widgets: HomeWidgets
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Must be created before the activity starts: it registers for activity results.
+        widgets = HomeWidgets(this)
+        widgets.restoreState(savedInstanceState)
         // Fully transparent bars over the wallpaper; icon colours are set per state in LauncherScreen.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -27,7 +32,31 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = Unit
         })
-        setContent { LauncherScreen(vm) }
+        setContent { LauncherScreen(vm, widgets) }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgets.onStart()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        widgets.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        widgets.saveState(outState)
+    }
+
+    // Widget setup screens are started by AppWidgetHost, which only supports the classic result API.
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!widgets.onActivityResult(requestCode, resultCode)) {
+            @Suppress("DEPRECATION")
+            super.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

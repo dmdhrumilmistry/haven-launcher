@@ -40,6 +40,9 @@ sealed interface HomeItem {
     }
 }
 
+/** A widget on the home screen. The id belongs to our AppWidgetHost and is only valid on this device. */
+data class HomeWidget(val id: Int, val rows: Int)
+
 /**
  * Every user-facing preference in one immutable object. Defaults are chosen to be calm and
  * familiar out of the box; everything else is opt-in.
@@ -59,15 +62,19 @@ data class LauncherSettings(
     val clockFormat: ClockFormat = ClockFormat.SYSTEM,
     val clockSize: ClockSize = ClockSize.MEDIUM,
     val showDate: Boolean = true,
-    val homeAlignment: HomeAlignment = HomeAlignment.START,
-    val homeStyle: HomeStyle = HomeStyle.TEXT,
+    // Stock-Android feel by default: a centered grid of icons.
+    val homeAlignment: HomeAlignment = HomeAlignment.CENTER,
+    val homeStyle: HomeStyle = HomeStyle.DOCK,
+    val homeColumns: Int = 4,
     val homePosition: HomePosition = HomePosition.CENTER,
     val showDrawerButton: Boolean = true,
+    val lockHomeLayout: Boolean = false,
     val favorites: List<HomeItem> = emptyList(),
     val favoritesSeeded: Boolean = false,
+    val widgets: List<HomeWidget> = emptyList(),
 
     // App drawer
-    val drawerLayout: DrawerLayout = DrawerLayout.LIST,
+    val drawerLayout: DrawerLayout = DrawerLayout.GRID,
     val gridColumns: Int = 0, // 0 = adapt to screen width
     val showGridLabels: Boolean = true,
     val showListIcons: Boolean = true,
@@ -75,13 +82,17 @@ data class LauncherSettings(
     val iconShape: IconShape = IconShape.SYSTEM,
     val themedIcons: Boolean = false,
     val separateProfileTabs: Boolean = true,
+    val showSuggestions: Boolean = true,
 
     // Search
-    val autoShowKeyboard: Boolean = true,
+    // Off: opening the drawer to browse shouldn't throw a keyboard over half the apps.
+    val autoShowKeyboard: Boolean = false,
     val searchBarAtBottom: Boolean = false,
     val autoLaunchSingleResult: Boolean = false,
     val showWebSearch: Boolean = true,
     val searchHiddenApps: Boolean = false,
+    /** Hidden apps need the device's fingerprint/face/PIN before they can be seen. */
+    val lockHiddenApps: Boolean = false,
 
     // Gestures
     val swipeDownAction: SwipeDownAction = SwipeDownAction.NOTIFICATIONS,
@@ -108,10 +119,15 @@ data class LauncherSettings(
         put("showDate", showDate)
         put("homeAlignment", homeAlignment.name)
         put("homeStyle", homeStyle.name)
+        put("homeColumns", homeColumns)
         put("homePosition", homePosition.name)
         put("showDrawerButton", showDrawerButton)
+        put("lockHomeLayout", lockHomeLayout)
+        put("showSuggestions", showSuggestions)
+        put("lockHiddenApps", lockHiddenApps)
         put("favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
         put("favoritesSeeded", favoritesSeeded)
+        put("widgets", JSONArray().apply { widgets.forEach { put(JSONObject().put("id", it.id).put("rows", it.rows)) } })
         put("drawerLayout", drawerLayout.name)
         put("gridColumns", gridColumns)
         put("showGridLabels", showGridLabels)
@@ -132,7 +148,8 @@ data class LauncherSettings(
     }
 
     companion object {
-        const val SCHEMA_VERSION = 1
+        // 2: keyboard no longer opens with the drawer by default (it was on in 1).
+        const val SCHEMA_VERSION = 2
 
         /**
          * Lenient parser: unknown keys are ignored and missing or malformed values fall back to
@@ -140,6 +157,7 @@ data class LauncherSettings(
          */
         fun fromJson(json: JSONObject): LauncherSettings {
             val d = LauncherSettings()
+            val version = json.optInt("version", 1)
             return LauncherSettings(
                 themeMode = json.enum("themeMode", d.themeMode),
                 dynamicColor = json.optBoolean("dynamicColor", d.dynamicColor),
@@ -154,12 +172,23 @@ data class LauncherSettings(
                 showDate = json.optBoolean("showDate", d.showDate),
                 homeAlignment = json.enum("homeAlignment", d.homeAlignment),
                 homeStyle = json.enum("homeStyle", d.homeStyle),
+                homeColumns = json.optInt("homeColumns", d.homeColumns).coerceIn(3, 6),
                 homePosition = json.enum("homePosition", d.homePosition),
                 showDrawerButton = json.optBoolean("showDrawerButton", d.showDrawerButton),
+                lockHomeLayout = json.optBoolean("lockHomeLayout", d.lockHomeLayout),
+                showSuggestions = json.optBoolean("showSuggestions", d.showSuggestions),
+                lockHiddenApps = json.optBoolean("lockHiddenApps", d.lockHiddenApps),
                 favorites = json.optJSONArray("favorites")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::homeItemFromJson) }
                 }?.distinctBy { it.id } ?: d.favorites,
                 favoritesSeeded = json.optBoolean("favoritesSeeded", d.favoritesSeeded),
+                widgets = json.optJSONArray("widgets")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                        val id = o.optInt("id", -1)
+                        if (id < 0) null else HomeWidget(id, o.optInt("rows", 2).coerceIn(1, 6))
+                    }.distinctBy { it.id }
+                } ?: d.widgets,
                 drawerLayout = json.enum("drawerLayout", d.drawerLayout),
                 gridColumns = json.optInt("gridColumns", d.gridColumns).let { if (it == 0 || it in 3..7) it else 0 },
                 showGridLabels = json.optBoolean("showGridLabels", d.showGridLabels),
@@ -168,7 +197,8 @@ data class LauncherSettings(
                 iconShape = json.enum("iconShape", d.iconShape),
                 themedIcons = json.optBoolean("themedIcons", d.themedIcons),
                 separateProfileTabs = json.optBoolean("separateProfileTabs", d.separateProfileTabs),
-                autoShowKeyboard = json.optBoolean("autoShowKeyboard", d.autoShowKeyboard),
+                // Version 1 saved "on" for everyone because it was the default; reset it once.
+                autoShowKeyboard = if (version < 2) false else json.optBoolean("autoShowKeyboard", d.autoShowKeyboard),
                 searchBarAtBottom = json.optBoolean("searchBarAtBottom", d.searchBarAtBottom),
                 autoLaunchSingleResult = json.optBoolean("autoLaunchSingleResult", d.autoLaunchSingleResult),
                 showWebSearch = json.optBoolean("showWebSearch", d.showWebSearch),

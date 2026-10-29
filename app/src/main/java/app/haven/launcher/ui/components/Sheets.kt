@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -84,6 +85,8 @@ fun AppActionsSheet(
     onRename: () -> Unit,
     onToggleHidden: () -> Unit,
     onDismiss: () -> Unit,
+    /** Opens the phone's own app-cloning screen; null where the phone has none. */
+    onClone: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -160,6 +163,9 @@ fun AppActionsSheet(
             ActionRow(Icons.Filled.Info, stringResource(R.string.action_app_info)) {
                 SystemActions.openAppInfo(context, item.app.component, item.app.user)
                 onDismiss()
+            }
+            if (onClone != null) {
+                ActionRow(Icons.Filled.AddCircle, stringResource(R.string.action_clone), onClone)
             }
             if (!item.app.isSystemApp) {
                 ActionRow(Icons.Filled.Delete, stringResource(R.string.action_uninstall)) {

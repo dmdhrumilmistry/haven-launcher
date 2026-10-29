@@ -32,13 +32,13 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug assembleRelease
 
       - name: Lint
-        run: ./gradlew --no-daemon lintDebug
+        run: ./gradlew --no-daemon lintStandardDebug lintFullDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
           name: haven-launcher-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/*/debug/*.apk
           retention-days: 14
 
       - name: Upload lint report
@@ -46,6 +46,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: lint-report
-          path: app/build/reports/lint-results-debug.html
+          path: app/build/reports/lint-results-*.html
           if-no-files-found: ignore
           retention-days: 14
