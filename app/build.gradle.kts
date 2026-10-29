@@ -15,7 +15,7 @@ val ciVersionCode: Int? = System.getenv("HAVEN_VERSION_CODE")?.toIntOrNull()
 
 android {
     namespace = "app.haven.launcher"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "app.haven.launcher"
