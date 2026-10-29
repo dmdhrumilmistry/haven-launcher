@@ -93,6 +93,8 @@ data class LauncherSettings(
     val searchHiddenApps: Boolean = false,
     /** Hidden apps need the device's fingerprint/face/PIN before they can be seen. */
     val lockHiddenApps: Boolean = false,
+    /** A "Hidden" section in the app drawer, next to Personal and Work. */
+    val showHiddenTab: Boolean = true,
 
     // Gestures
     val swipeDownAction: SwipeDownAction = SwipeDownAction.NOTIFICATIONS,
@@ -125,6 +127,7 @@ data class LauncherSettings(
         put("lockHomeLayout", lockHomeLayout)
         put("showSuggestions", showSuggestions)
         put("lockHiddenApps", lockHiddenApps)
+        put("showHiddenTab", showHiddenTab)
         put("favorites", JSONArray().apply { favorites.forEach { put(it.toJson()) } })
         put("favoritesSeeded", favoritesSeeded)
         put("widgets", JSONArray().apply { widgets.forEach { put(JSONObject().put("id", it.id).put("rows", it.rows)) } })
@@ -178,6 +181,7 @@ data class LauncherSettings(
                 lockHomeLayout = json.optBoolean("lockHomeLayout", d.lockHomeLayout),
                 showSuggestions = json.optBoolean("showSuggestions", d.showSuggestions),
                 lockHiddenApps = json.optBoolean("lockHiddenApps", d.lockHiddenApps),
+                showHiddenTab = json.optBoolean("showHiddenTab", d.showHiddenTab),
                 favorites = json.optJSONArray("favorites")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(::homeItemFromJson) }
                 }?.distinctBy { it.id } ?: d.favorites,

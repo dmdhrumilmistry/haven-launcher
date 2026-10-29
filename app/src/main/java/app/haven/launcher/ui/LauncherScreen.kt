@@ -104,6 +104,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val prompt by vm.prompt.collectAsStateWithLifecycle()
     val suggestions by vm.suggestions.collectAsStateWithLifecycle()
     val newApps by vm.newApps.collectAsStateWithLifecycle()
+    val hiddenUnlocked by vm.hiddenUnlocked.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val view = LocalView.current
@@ -367,6 +368,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         search = search,
                         suggestions = suggestions,
                         newApps = newApps,
+                        hiddenUnlocked = hiddenUnlocked,
                         searchFocus = searchFocus,
                         callbacks = drawerCallbacks,
                         modifier = Modifier

@@ -27,7 +27,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 
 **Work profile, private space and clones**
 - Separate **Personal / Work / Private** tabs: swipe between them or tap (or merge work into the main list)
-- **Clone app** opens the phone's own cloning screen where one exists (Android 14+ cloned apps, Samsung Dual Messenger, Xiaomi Dual apps). Android doesn't let third-party launchers create clones themselves; clones show in the drawer with a "Clone" tag
+- **Clone app** opens the phone's own cloning screen where one exists (Android 14+ cloned apps, Samsung Dual Messenger, Xiaomi Dual apps, and similar screens found in the phone's Settings app). Android doesn't let third-party launchers create clones themselves; clones show in the drawer with a "Clone" tag
 - Work apps can be paused and resumed from the drawer. Paused apps show greyed out, and tapping one offers to turn work apps back on
 - Android 15+ private space: lock and unlock from the drawer. It never mixes into other lists, and it respects the system's "hide when locked" setting
 - Every non-personal app carries the system's own badge, so it always matches Settings
@@ -36,7 +36,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Theme (system, light, dark), Material You colors, text size, drawer background opacity
 - Icon size, icon shape (system, circle, squircle, rounded square), themed monochrome icons (Android 13+)
 - Gestures: swipe down for notifications or search, double-tap to lock (optional)
-- Hidden apps, optionally locked with your fingerprint, face or screen lock
+- Hidden apps in their own **Hidden** tab (optional), locked with your fingerprint, face or screen lock if you like
 - Renamed apps, reorderable home apps
 - Export and import all settings as a JSON file; reset to defaults
 

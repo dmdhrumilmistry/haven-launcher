@@ -41,7 +41,7 @@ import kotlinx.coroutines.withContext
 import java.text.Collator
 import java.util.Locale
 
-enum class DrawerTab { PERSONAL, WORK, PRIVATE }
+enum class DrawerTab { PERSONAL, WORK, PRIVATE, HIDDEN }
 
 sealed interface HomeEntry {
     val id: String
@@ -97,8 +97,12 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val drawer: StateFlow<DrawerModel> =
-        combine(allApps, snapshot, settings.map { it.separateProfileTabs }.distinctUntilChanged()) { apps, snap, separate ->
-            buildDrawer(apps, snap, separate)
+        combine(
+            allApps,
+            snapshot,
+            settings.map { it.separateProfileTabs to it.showHiddenTab }.distinctUntilChanged(),
+        ) { apps, snap, (separate, hiddenTab) ->
+            buildDrawer(apps, snap, separate, hiddenTab)
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.Eagerly, DrawerModel())
 
@@ -342,7 +346,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return if (first.isLetter()) first.uppercase() else "#"
     }
 
-    private fun buildDrawer(apps: List<AppItem>, snap: AppsSnapshot, separate: Boolean): DrawerModel {
+    private fun buildDrawer(apps: List<AppItem>, snap: AppsSnapshot, separate: Boolean, hiddenTab: Boolean): DrawerModel {
         val visibleProfiles = snap.profiles.filter { it.isVisible }
         val work = visibleProfiles.firstOrNull { it.type == ProfileType.WORK }
         val private = visibleProfiles.firstOrNull { it.type == ProfileType.PRIVATE }
@@ -354,16 +358,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             // Private space never mixes into other lists, even with tabs off. That's its point.
             ProfileType.PRIVATE -> DrawerTab.PRIVATE
         }
+        // Hidden apps from any visible profile except private space (which already has its own lock).
+        val hidden = apps.filter { it.isHidden && it.app.profile.isVisible && it.profileType != ProfileType.PRIVATE }
 
         val tabs = buildList {
             add(DrawerTab.PERSONAL)
             if (work != null && separate) add(DrawerTab.WORK)
             if (private != null) add(DrawerTab.PRIVATE)
+            if (hiddenTab && hidden.isNotEmpty()) add(DrawerTab.HIDDEN)
         }
         val grouped = apps.filter { !it.isHidden && it.app.profile.isVisible }.groupBy { tabOf(it.profileType) }
         return DrawerModel(
             tabs = tabs,
-            appsByTab = tabs.associateWith { grouped[it].orEmpty() },
+            appsByTab = tabs.associateWith { if (it == DrawerTab.HIDDEN) hidden else grouped[it].orEmpty() },
             profileByTab = buildMap {
                 personal?.let { put(DrawerTab.PERSONAL, it) }
                 if (separate) work?.let { put(DrawerTab.WORK, it) }

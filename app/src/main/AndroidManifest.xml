@@ -54,6 +54,7 @@
         <package android:name="com.android.settings" />
         <package android:name="com.samsung.android.da.daagent" />
         <package android:name="com.miui.securitycore" />
+        <package android:name="com.motorola.settings" />
         <!-- Apps that only offer widgets (no launcher icon) must still show up in the widget picker. -->
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
