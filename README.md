@@ -55,6 +55,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 |---|---|
 | `EXPAND_STATUS_BAR` | Swipe down to open notifications |
 | `REQUEST_DELETE_PACKAGES` | The "Uninstall" action opens the system uninstall dialog |
+| `USE_BIOMETRIC` | Fingerprint or face check for locked hidden apps (your PIN works too) |
 | `ACCESS_HIDDEN_PROFILES` | Android 15+: lets the home app show the private space entry |
 | Accessibility service (**full build only**, off until you enable it) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
 
