@@ -1,6 +1,5 @@
 Categories:
-  - System
-  - Theming
+  - Launcher
 License: GPL-3.0-only
 AuthorName: Dhrumil Mistry
 SourceCode: https://github.com/dmdhrumilmistry/haven-launcher
@@ -11,14 +10,18 @@ AutoName: Haven
 
 RepoType: git
 Repo: https://github.com/dmdhrumilmistry/haven-launcher.git
+Binaries: 
+  https://github.com/dmdhrumilmistry/haven-launcher/releases/download/v%v/haven-launcher-v%v-full.apk
 
 Builds:
   - versionName: 1.3.0
     versionCode: 10300
-    commit: v1.3.0
+    commit: 0857eda59f98ef41ca65618d2a24fd4a846998b2
     subdir: app
     gradle:
       - full
+
+AllowedAPKSigningKeys: 97ab94b35c584b75f84fe37ee047eb5269528a4d68c99d960c561c7786be9134
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
