@@ -336,7 +336,7 @@ private fun ProfilePager(
     LaunchedEffect(pager) {
         snapshotFlow { pager.settledPage }.collect { page -> currentTabs.getOrNull(page)?.let(cb.onSelectTab) }
     }
-    HorizontalPager(state = pager, key = { tabs.getOrElse(it) { DrawerTab.PERSONAL } }, beyondViewportPageCount = 1) { page ->
+    HorizontalPager(state = pager, key = { tabs.getOrElse(it) { DrawerTab.PERSONAL }.key }, beyondViewportPageCount = 1) { page ->
         val pageTab = tabs.getOrElse(page) { DrawerTab.PERSONAL }
         TabContent(pageTab, model, settings, suggestions, cb)
     }

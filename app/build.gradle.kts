@@ -70,6 +70,10 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // UI smoke tests run on the JVM with Robolectric: fast, no emulator needed in CI.
+        unitTests.isIncludeAndroidResources = true
+    }
     dependenciesInfo {
         // Keeps the APK free of the encrypted dependency blob, which F-Droid and others reject.
         includeInApk = false
@@ -94,4 +98,10 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
