@@ -110,7 +110,11 @@ class AppRepository(
     }
 
     private fun changed(vararg packages: String) {
-        packages.forEach(iconCache::invalidatePackage)
+        packages.forEach {
+            iconCache.invalidatePackage(it)
+            // If it's the selected icon pack that changed, re-read it.
+            iconCache.iconPacks.invalidate(it)
+        }
         reload()
     }
 

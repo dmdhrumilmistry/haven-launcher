@@ -27,13 +27,15 @@ data class IconStyle(
     val shape: IconShape,
     /** Non-null = themed (monochrome) icons using these ARGB colors. */
     val themed: Pair<Int, Int>?,
+    /** Icon pack package, or null for the apps' own icons. */
+    val iconPack: String? = null,
 )
 
 /**
  * Renders and caches app icons. Applies the user's shape, optional themed (monochrome) style,
  * and the system work/private/clone badge so every profile stays recognisable.
  */
-class IconCache(private val context: Context) {
+class IconCache(private val context: Context, val iconPacks: IconPacks = IconPacks(context)) {
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val myUser = Process.myUserHandle()
 
@@ -60,11 +62,14 @@ class IconCache(private val context: Context) {
     fun load(app: InstalledApp, style: IconStyle): ImageBitmap? {
         val key = keyFor(app, style)
         cache.get(key)?.let { return it }
-        val drawable = try {
-            app.info.getIcon(context.resources.displayMetrics.densityDpi)
-        } catch (e: Exception) {
-            null
-        } ?: context.packageManager.defaultActivityIcon
+        val density = context.resources.displayMetrics.densityDpi
+        // Icon pack first (if chosen and it has this app), then the app's own icon.
+        val drawable = style.iconPack?.let { iconPacks.drawableFor(it, app.component, density) }
+            ?: try {
+                app.info.getIcon(density)
+            } catch (e: Exception) {
+                null
+            } ?: context.packageManager.defaultActivityIcon
         return render(drawable, app.user, style)?.also { cache.put(key, it) }
     }
 

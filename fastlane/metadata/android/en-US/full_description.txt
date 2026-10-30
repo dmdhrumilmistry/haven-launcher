@@ -1,0 +1,39 @@
+Haven is a calm, clean home screen that feels like stock Android, with the features you'd expect from a modern launcher, and none of the noise. No ads, no tracking, no accounts, and no internet permission, so nothing ever leaves your phone.
+
+<b>Home screen</b>
+• Clock, date and your next alarm
+• Icon grid (3 to 6 columns), names only, or icons with names
+• Long-press and drag to rearrange; drop an app onto another to make a folder
+• Widgets: add, resize, reorder and remove
+• Wallpaper-aware text color, optional dim
+• Pinned shortcuts from other apps ("Add to home screen")
+
+<b>App drawer</b>
+• Swipe up, search instantly: ignores accents, matches initials ("gm" finds Google Maps), Enter opens the top result
+• Built-in calculator in search
+• Grid or list, A-Z scroller in every language, or sort by most used
+• Suggested apps from your own habits, learned only on your phone
+• Your own categories as tabs, plus folders by drag and drop
+• A dot on new apps you haven't opened yet
+
+<b>Work profile, private space and clones</b>
+• Swipe between Personal, Work and Private tabs
+• Pause and resume work apps, lock and unlock Android 15's private space
+• Cloned apps show with a "Clone" tag; "Clone app" opens your phone's cloning screen where it has one
+
+<b>Privacy and focus</b>
+• Hide apps, and lock them with your fingerprint, face or screen lock
+• Pause distracting apps for a while or on a schedule
+• Shortcut to Digital Wellbeing's app timer for hard limits
+
+<b>Make it yours</b>
+• Light, dark or system theme; Material You colors
+• Icon packs, icon shapes, themed (monochrome) icons
+• Notification badges as a dot or a number
+• Double-tap to lock, swipe down for notifications
+• Rename apps; export and import all your settings
+
+<b>Permissions, plainly</b>
+Haven has no internet access. Double-tap to lock uses an accessibility service only to lock the screen; notification badges only count notifications and never read them. Both are off until you turn them on.
+
+Haven is free and open source (GPL-3.0).

@@ -17,6 +17,7 @@ enum class IconShape { SYSTEM, CIRCLE, SQUIRCLE, ROUNDED_SQUARE }
 enum class SwipeDownAction { NOTIFICATIONS, SEARCH, NONE }
 enum class DoubleTapAction { LOCK, NONE }
 enum class DrawerSort { ALPHABETICAL, MOST_USED }
+enum class BadgeStyle { OFF, DOT, COUNT }
 
 /** A folder in the app drawer. Its apps leave the main list and live inside it. */
 data class DrawerFolder(val id: String, val name: String, val apps: List<String>)
@@ -96,6 +97,9 @@ data class LauncherSettings(
     val iconSize: IconSize = IconSize.MEDIUM,
     val iconShape: IconShape = IconShape.SYSTEM,
     val themedIcons: Boolean = false,
+    /** Package of the selected icon pack, or null for the apps' own icons. */
+    val iconPack: String? = null,
+    val badgeStyle: BadgeStyle = BadgeStyle.DOT,
     val separateProfileTabs: Boolean = true,
     val showSuggestions: Boolean = true,
     val drawerSort: DrawerSort = DrawerSort.ALPHABETICAL,
@@ -172,6 +176,8 @@ data class LauncherSettings(
         put("iconSize", iconSize.name)
         put("iconShape", iconShape.name)
         put("themedIcons", themedIcons)
+        put("iconPack", iconPack ?: "")
+        put("badgeStyle", badgeStyle.name)
         put("separateProfileTabs", separateProfileTabs)
         put("autoShowKeyboard", autoShowKeyboard)
         put("searchBarAtBottom", searchBarAtBottom)
@@ -251,6 +257,8 @@ data class LauncherSettings(
                 iconSize = json.enum("iconSize", d.iconSize),
                 iconShape = json.enum("iconShape", d.iconShape),
                 themedIcons = json.optBoolean("themedIcons", d.themedIcons),
+                iconPack = json.optString("iconPack").takeIf { it.isNotBlank() },
+                badgeStyle = json.enum("badgeStyle", d.badgeStyle),
                 separateProfileTabs = json.optBoolean("separateProfileTabs", d.separateProfileTabs),
                 // Version 1 saved "on" for everyone because it was the default; reset it once.
                 autoShowKeyboard = if (version < 2) false else json.optBoolean("autoShowKeyboard", d.autoShowKeyboard),

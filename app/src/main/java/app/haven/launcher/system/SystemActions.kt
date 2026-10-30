@@ -142,6 +142,19 @@ object SystemActions {
         safeStart(context, chooser)
     }
 
+    /** Straight to Haven's switch where supported (Android 11+), otherwise the list of apps. */
+    fun openNotificationAccessSettings(context: Context) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val direct = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(
+                    Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    NotificationBadges.listenerComponent(context).flattenToString(),
+                )
+            if (safeStart(context, direct, showError = false)) return
+        }
+        safeStart(context, Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+
     fun openAccessibilitySettings(context: Context) {
         safeStart(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }

@@ -67,7 +67,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.haven.launcher.BuildConfig
 import app.haven.launcher.R
 import app.haven.launcher.data.AppCategory
+import app.haven.launcher.data.BadgeStyle
 import app.haven.launcher.data.ClockFormat
+import app.haven.launcher.system.NotificationBadges
 import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.data.ClockSize
 import app.haven.launcher.data.DoubleTapAction
@@ -117,7 +119,7 @@ class SettingsActivity : ComponentActivity() {
         setContent {
             val settings by vm.settings.collectAsStateWithLifecycle()
             HavenTheme(settings) {
-                CompositionLocalProvider(LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons)) {
+                CompositionLocalProvider(LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons, settings.iconPack)) {
                     SettingsRoot(vm, settings, startPage, onExit = ::finish)
                 }
             }
@@ -245,11 +247,14 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
     val isDefault by vm.isDefaultLauncher.collectAsStateWithLifecycle()
     var lockServiceOn by remember { mutableStateOf(LauncherAccessibilityService.isEnabled(context)) }
     var showLockDisclosure by remember { mutableStateOf(false) }
+    var showBadgeDisclosure by remember { mutableStateOf(false) }
+    var badgeAccess by remember { mutableStateOf(NotificationBadges.hasAccess(context)) }
     var confirmReset by remember { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         vm.onResume()
         lockServiceOn = LauncherAccessibilityService.isEnabled(context)
+        badgeAccess = NotificationBadges.hasAccess(context)
     }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -465,6 +470,46 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                     summary = stringResource(R.string.setting_themed_icons_summary),
                 )
             }
+        }
+        item {
+            val packs = remember { context.haven.icons.iconPacks.installed() }
+            val systemLabel = stringResource(R.string.icon_pack_none)
+            val options = listOf<Pair<String?, String>>(null to systemLabel) + packs.map { it.packageName to it.label } +
+                // Keep showing a selected pack that has since been uninstalled, so the setting isn't blank.
+                listOfNotNull(s.iconPack?.takeIf { sel -> packs.none { it.packageName == sel } }?.let { it to it })
+            ChoiceRow(
+                stringResource(R.string.setting_icon_pack),
+                options,
+                s.iconPack,
+                { v -> repo.update { it.copy(iconPack = v) } },
+            )
+            if (packs.isEmpty()) {
+                InfoRow("", stringResource(R.string.icon_pack_hint))
+            }
+        }
+        // ---- Notification badges ----
+        if (BuildConfig.NOTIFICATION_BADGES) {
+            item {
+                ChoiceRow(
+                    stringResource(R.string.setting_badges),
+                    listOf(
+                        BadgeStyle.DOT to stringResource(R.string.badges_dot),
+                        BadgeStyle.COUNT to stringResource(R.string.badges_count),
+                        BadgeStyle.OFF to stringResource(R.string.badges_off),
+                    ),
+                    s.badgeStyle,
+                    { v -> repo.update { it.copy(badgeStyle = v) } },
+                )
+            }
+            if (s.badgeStyle != BadgeStyle.OFF && !badgeAccess) {
+                item {
+                    ClickRow(stringResource(R.string.badges_access_needed), stringResource(R.string.badges_access_needed_summary)) {
+                        showBadgeDisclosure = true
+                    }
+                }
+            }
+        } else {
+            item { InfoRow(stringResource(R.string.setting_badges), stringResource(R.string.badges_full_build_only)) }
         }
         item {
             SwitchRow(
@@ -729,6 +774,20 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 }) { Text(stringResource(R.string.action_open_settings)) }
             },
             dismissButton = { TextButton(onClick = { showLockDisclosure = false }) { Text(stringResource(R.string.action_not_now)) } },
+        )
+    }
+    if (showBadgeDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showBadgeDisclosure = false },
+            title = { Text(stringResource(R.string.badges_disclosure_title)) },
+            text = { Text(stringResource(R.string.badges_disclosure_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBadgeDisclosure = false
+                    SystemActions.openNotificationAccessSettings(context)
+                }) { Text(stringResource(R.string.action_open_settings)) }
+            },
+            dismissButton = { TextButton(onClick = { showBadgeDisclosure = false }) { Text(stringResource(R.string.action_not_now)) } },
         )
     }
     if (confirmReset) {

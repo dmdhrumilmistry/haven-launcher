@@ -19,26 +19,28 @@ jobs:
     timeout-minutes: 30
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - name: Work out version from tag
+      - name: Check tag matches the app version
         run: |
           if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.]+)?$ ]]; then
             echo "::error::Tag '$TAG' must look like v1.2.3 or v1.2.3-beta.1"
             exit 1
           fi
           major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; patch=${BASH_REMATCH[3]}
-          if (( minor > 99 || patch > 99 )); then
-            echo "::error::Minor and patch must be 0-99 so version codes keep increasing"
+          expected_code=$(( major * 10000 + minor * 100 + patch ))
+          name=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          code=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)
+          if [[ "$name" != "${TAG#v}" || "$code" != "$expected_code" ]]; then
+            echo "::error::Tag $TAG needs versionName ${TAG#v} and versionCode $expected_code in app/build.gradle.kts (found $name / $code)"
             exit 1
           fi
-          # v1.2.3 -> 10203. Always increases with the version, which Android requires for updates.
-          echo "HAVEN_VERSION_NAME=${TAG#v}" >> "$GITHUB_ENV"
-          echo "HAVEN_VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
           [[ -n "${BASH_REMATCH[4]}" ]] && echo "PRERELEASE=--prerelease" >> "$GITHUB_ENV" || true
 
       - name: Restore signing key
@@ -59,37 +61,46 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build signed release APK
+      - name: Build signed APKs and Play bundle
         env:
           HAVEN_KEYSTORE_PASSWORD: ${{ secrets.HAVEN_KEYSTORE_PASSWORD }}
           HAVEN_KEY_ALIAS: ${{ secrets.HAVEN_KEY_ALIAS }}
           HAVEN_KEY_PASSWORD: ${{ secrets.HAVEN_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon assembleRelease bundleFullRelease
 
       - name: Verify signatures and prepare files
         run: |
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           mkdir -p dist
-          # Standard is the main download; full adds double-tap to lock (accessibility service).
           for flavor in standard full; do
             apk="app/build/outputs/apk/$flavor/release/app-$flavor-release.apk"
             "$apksigner" verify --print-certs "$apk"
             suffix=$([[ $flavor == full ]] && echo "-full" || true)
             cp "$apk" "dist/haven-launcher-$TAG$suffix.apk"
           done
-          (cd dist && sha256sum *.apk > SHA256SUMS.txt)
+          # App bundle for Google Play (full build: Play installs aren't subject to the sideloading block).
+          cp app/build/outputs/bundle/fullRelease/app-full-release.aab "dist/haven-launcher-$TAG-play.aab"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          changelog="fastlane/metadata/android/en-US/changelogs/$VERSION_CODE.txt"
           {
-            echo "### Which APK?"
+            if [[ -f "$changelog" ]]; then
+              echo "### What's new"
+              echo
+              cat "$changelog"
+              echo
+            fi
+            echo "### Which file?"
             echo
-            echo "- **haven-launcher-$TAG.apk**: recommended for everyone."
-            echo "- **haven-launcher-$TAG-full.apk**: adds the optional double-tap-to-lock gesture. It declares an accessibility service, so Google Play Protect may block installing it in some countries."
+            echo "- **haven-launcher-$TAG.apk**: recommended if you install from this page."
+            echo "- **haven-launcher-$TAG-full.apk**: adds double-tap to lock and notification badges. They need an accessibility service and notification access, so Google Play Protect may block installing it from a browser in some countries."
+            echo "- **haven-launcher-$TAG-play.aab**: the app bundle for Google Play (not installable directly)."
             echo
-            echo "Both are signed with the same key and can update each other."
+            echo "Both APKs are signed with the same key and can update each other."
             echo
             gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body
           } > "$RUNNER_TEMP/notes.md"
@@ -98,6 +109,28 @@ jobs:
           else
             gh release create "$TAG" dist/* --title "Haven $TAG" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag $PRERELEASE
           fi
+
+      # Optional: once the app exists in Play Console and a service account is set up
+      # (see docs/PUBLISHING.md), each release also goes to the internal testing track.
+      - name: Prepare Play "what's new"
+        if: env.HAS_PLAY == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/whatsnew"
+          changelog="fastlane/metadata/android/en-US/changelogs/$VERSION_CODE.txt"
+          # Play allows 500 characters.
+          if [[ -f "$changelog" ]]; then head -c 500 "$changelog"; else echo "Bug fixes and improvements."; fi \
+            > "$RUNNER_TEMP/whatsnew/whatsnew-en-US"
+
+      - name: Upload to Google Play (internal testing)
+        if: env.HAS_PLAY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: app.haven.launcher
+          releaseFiles: dist/haven-launcher-${{ env.TAG }}-play.aab
+          track: internal
+          status: completed
+          whatsNewDirectory: ${{ runner.temp }}/whatsnew
 
       - name: Remove signing key
         if: always()

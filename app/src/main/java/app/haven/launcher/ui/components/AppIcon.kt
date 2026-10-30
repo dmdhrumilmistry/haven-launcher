@@ -4,7 +4,17 @@ import android.content.pm.ShortcutInfo
 import android.graphics.Rect
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.haven.launcher.data.BadgeStyle
+import app.haven.launcher.system.NotificationBadges
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -32,9 +42,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Icon shape + themed icon preferences, provided once at the root. */
-data class IconPrefs(val shape: IconShape = IconShape.SYSTEM, val themed: Boolean = false)
+data class IconPrefs(val shape: IconShape = IconShape.SYSTEM, val themed: Boolean = false, val iconPack: String? = null)
 
 val LocalIconPrefs = compositionLocalOf { IconPrefs() }
+
+/** Notification counts per "package#userSerial" (see NotificationBadges), and how to show them. */
+val LocalBadges = compositionLocalOf { emptyMap<String, Int>() }
+val LocalBadgeStyle = compositionLocalOf { BadgeStyle.OFF }
+
+fun AppItem.badgeKey() = NotificationBadges.key(app.packageName, app.profile.serial)
 
 /** Keys of apps paused right now (Haven-level pause), so every place shows them greyed out. */
 val LocalPausedApps = compositionLocalOf { emptySet<String>() }
@@ -45,7 +61,7 @@ private fun rememberIconStyle(size: Dp): IconStyle {
     val px = with(LocalDensity.current) { size.roundToPx() }
     val scheme = MaterialTheme.colorScheme
     val themed = if (prefs.themed) scheme.secondaryContainer.toArgb() to scheme.onSecondaryContainer.toArgb() else null
-    return remember(px, prefs, themed) { IconStyle(px, prefs.shape, themed) }
+    return remember(px, prefs, themed) { IconStyle(px, prefs.shape, themed, prefs.iconPack) }
 }
 
 private val greyscale = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
@@ -63,7 +79,45 @@ fun AppIcon(item: AppItem, size: Dp, modifier: Modifier = Modifier) {
         if (value == null) value = withContext(Dispatchers.IO) { cache.load(item.app, style) }
     }
     val paused = item.key in LocalPausedApps.current
-    IconImage(bitmap, size, dimmed = item.isPaused || item.app.isSuspended || paused, modifier)
+    val count = LocalBadges.current[item.badgeKey()] ?: 0
+    Box(modifier) {
+        IconImage(bitmap, size, dimmed = item.isPaused || item.app.isSuspended || paused, Modifier)
+        IconBadge(count, size, Modifier.align(Alignment.TopEnd))
+    }
+}
+
+/** Notification dot or count, in the corner of an icon. Nothing when there's nothing new. */
+@Composable
+fun IconBadge(count: Int, iconSize: Dp, modifier: Modifier = Modifier) {
+    val style = LocalBadgeStyle.current
+    if (count <= 0 || style == BadgeStyle.OFF) return
+    val scheme = MaterialTheme.colorScheme
+    if (style == BadgeStyle.DOT) {
+        Box(
+            modifier
+                .size(iconSize * 0.26f)
+                .border(1.5.dp, scheme.surface, CircleShape)
+                .background(scheme.primary, CircleShape),
+        )
+    } else {
+        val text = if (count > 99) "99+" else count.toString()
+        Box(
+            modifier
+                .defaultMinSize(minWidth = iconSize * 0.38f, minHeight = iconSize * 0.38f)
+                .border(1.5.dp, scheme.surface, CircleShape)
+                .background(scheme.primary, CircleShape)
+                .padding(horizontal = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text,
+                color = scheme.onPrimary,
+                fontSize = (iconSize.value * 0.22f).coerceIn(9f, 13f).sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+    }
 }
 
 @Composable
