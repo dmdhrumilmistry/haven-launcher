@@ -7,11 +7,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Release signing and versioning come from the environment so no secrets live in the repo.
-// CI sets these from GitHub secrets and the release tag; see .github/workflows/release.yml.
+// Release signing comes from the environment so no secrets live in the repo.
+// CI sets it from GitHub secrets; see .github/workflows/release.yml.
 val releaseKeystore: String? = System.getenv("HAVEN_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
-val ciVersionName: String? = System.getenv("HAVEN_VERSION_NAME")?.takeIf { it.isNotBlank() }
-val ciVersionCode: Int? = System.getenv("HAVEN_VERSION_CODE")?.toIntOrNull()
 
 android {
     namespace = "app.haven.launcher"
@@ -21,8 +19,11 @@ android {
         applicationId = "app.haven.launcher"
         minSdk = 26
         targetSdk = 36
-        versionCode = ciVersionCode ?: 1
-        versionName = ciVersionName ?: "1.0.0"
+        // Bump both for every release (code = major*10000 + minor*100 + patch), and add
+        // fastlane/metadata/android/en-US/changelogs/<versionCode>.txt. The release workflow checks
+        // the tag matches. Kept as plain literals so F-Droid's update checker can read them.
+        versionCode = 10300
+        versionName = "1.3.0"
     }
 
     signingConfigs {
@@ -50,19 +51,22 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    // "standard" has no accessibility service. Google Play Protect blocks sideloaded apps that
-    // declare one in several countries, so this is the default download. "full" adds the
-    // optional double-tap-to-lock gesture, which needs that service.
+    // "standard" has no accessibility service and no notification listener. Google Play Protect
+    // blocks sideloaded apps that declare either one in several countries, so this is the default
+    // download. "full" adds double-tap to lock and notification badges, which need them; it's the
+    // build for app stores, where that block doesn't apply.
     flavorDimensions += "features"
     productFlavors {
         create("standard") {
             dimension = "features"
             isDefault = true
             buildConfigField("boolean", "LOCK_GESTURE", "false")
+            buildConfigField("boolean", "NOTIFICATION_BADGES", "false")
         }
         create("full") {
             dimension = "features"
             buildConfigField("boolean", "LOCK_GESTURE", "true")
+            buildConfigField("boolean", "NOTIFICATION_BADGES", "true")
         }
     }
 

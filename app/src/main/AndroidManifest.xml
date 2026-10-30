@@ -47,6 +47,21 @@
         <intent>
             <action android:name="android.intent.action.SHOW_ALARMS" />
         </intent>
+        <!-- Icon packs (ADW / Nova / Apex formats). -->
+        <intent>
+            <action android:name="org.adw.launcher.THEMES" />
+        </intent>
+        <intent>
+            <action android:name="com.novalauncher.THEME" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.anddoes.launcher.THEME" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.teslacoilsw.launcher.THEME" />
+        </intent>
         <!-- Digital Wellbeing's app timer screen. -->
         <intent>
             <action android:name="android.settings.action.APP_USAGE_SETTINGS" />

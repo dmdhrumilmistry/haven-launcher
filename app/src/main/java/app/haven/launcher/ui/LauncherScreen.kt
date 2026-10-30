@@ -70,6 +70,10 @@ import app.haven.launcher.ui.components.LocalIconPrefs
 import app.haven.launcher.ui.components.CategoryPickerDialog
 import app.haven.launcher.ui.components.FolderDialog
 import app.haven.launcher.ui.components.LocalPausedApps
+import app.haven.launcher.ui.components.LocalBadges
+import app.haven.launcher.ui.components.LocalBadgeStyle
+import app.haven.launcher.data.BadgeStyle
+import app.haven.launcher.system.NotificationBadges
 import app.haven.launcher.focus.AppPausedDialog
 import app.haven.launcher.focus.PauseChooserDialog
 import app.haven.launcher.ui.components.RenameDialog
@@ -111,6 +115,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val newApps by vm.newApps.collectAsStateWithLifecycle()
     val hiddenUnlocked by vm.hiddenUnlocked.collectAsStateWithLifecycle()
     val pauses by vm.pauses.collectAsStateWithLifecycle()
+    val badgeCounts by NotificationBadges.counts.collectAsStateWithLifecycle()
     var pauseTarget by remember { mutableStateOf<AppItem?>(null) }
     // Open folder (home or drawer), and the folder an app menu was opened from.
     var openFolder by remember { mutableStateOf<FolderRef?>(null) }
@@ -350,8 +355,10 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
 
     HavenTheme(settings) {
         CompositionLocalProvider(
-            LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons),
+            LocalIconPrefs provides IconPrefs(settings.iconShape, settings.themedIcons, settings.iconPack),
             LocalPausedApps provides pauses.keys,
+            LocalBadges provides badgeCounts,
+            LocalBadgeStyle provides if (BuildConfig.NOTIFICATION_BADGES) settings.badgeStyle else BadgeStyle.OFF,
         ) {
             Box(
                 Modifier

@@ -2,6 +2,8 @@
 
 A calm, clean Android home screen. No ads, no tracking, no accounts, and **no internet permission**, so nothing ever leaves the phone.
 
+**Get it:** [GitHub releases](https://github.com/dmdhrumilmistry/haven-launcher/releases) · F-Droid and Google Play: coming soon (see [docs/PUBLISHING.md](docs/PUBLISHING.md))
+
 Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26) and up, targets Android 16 (API 36).
 
 ## What it does
@@ -39,7 +41,8 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 
 **Customization**
 - Theme (system, light, dark), Material You colors, text size, drawer background opacity
-- Icon size, icon shape (system, circle, squircle, rounded square), themed monochrome icons (Android 13+)
+- Icon packs (ADW / Nova / Apex format), icon size, icon shape (system, circle, squircle, rounded square), themed monochrome icons (Android 13+)
+- Notification badges on icons, as a dot or a number, with totals on folders (full build; needs notification access)
 - Gestures: swipe down for notifications or search, double-tap to lock (optional)
 - Hidden apps in their own **Hidden** tab (optional), locked with your fingerprint, face or screen lock if you like
 - Renamed apps, reorderable home apps
@@ -68,6 +71,7 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 | `USE_BIOMETRIC` | Fingerprint or face check for locked hidden apps (your PIN works too) |
 | `ACCESS_HIDDEN_PROFILES` | Android 15+: lets the home app show the private space entry |
 | Accessibility service (**full build only**, off until you enable it) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
+| Notification access (**full build only**, off until you enable it) | Only to count notifications per app for icon badges. Never reads or stores their content |
 
 No internet, no storage, no contacts, no location.
 
@@ -76,7 +80,7 @@ No internet, no storage, no contacts, no location.
 Each release has two APKs, signed with the same key (so you can switch between them):
 
 - **`haven-launcher-vX.Y.Z.apk` (standard, recommended):** everything except double-tap to lock.
-- **`haven-launcher-vX.Y.Z-full.apk`:** adds double-tap to lock, which needs an accessibility service. In several countries Google Play Protect blocks installing sideloaded apps that declare one ("App blocked to protect your device"), so use the standard build there.
+- **`haven-launcher-vX.Y.Z-full.apk`:** adds double-tap to lock and notification badges, which need an accessibility service and notification access. In several countries Google Play Protect blocks installing sideloaded apps that declare one ("App blocked to protect your device"), so use the standard build there.
 
 Locally: `./gradlew assembleStandardDebug` or `./gradlew assembleFullDebug`.
 
@@ -167,8 +171,10 @@ app/src/main/java/app/haven/launcher/
     theme/
 ```
 
-## Not included (yet)
+## Privacy
 
-- Widgets
-- Notification dots (they need notification access, which conflicts with the privacy goals; could be added as opt-in)
-- Icon packs
+See [PRIVACY.md](PRIVACY.md): Haven collects nothing and has no internet permission.
+
+## License
+
+Haven is free software under the [GNU General Public License v3.0](LICENSE).

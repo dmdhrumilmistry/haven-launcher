@@ -48,7 +48,7 @@ fun SectionHeader(text: String) {
 @Composable
 private fun RowText(title: String, summary: String?, enabled: Boolean, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(
+        if (title.isNotEmpty()) Text(
             title,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),

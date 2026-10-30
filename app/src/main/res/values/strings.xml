@@ -178,6 +178,21 @@
     <string name="sort_alphabetical">A to Z</string>
     <string name="sort_most_used">Most used first</string>
 
+    <!-- Icon packs and notification badges -->
+    <string name="setting_icon_pack">Icon pack</string>
+    <string name="icon_pack_none">App icons (no pack)</string>
+    <string name="icon_pack_hint">Install an icon pack from your app store and pick it here. Apps it doesn\'t cover keep their own icon.</string>
+    <string name="badge_service_label">Haven notification badges</string>
+    <string name="setting_badges">Notification badges</string>
+    <string name="badges_dot">Dot</string>
+    <string name="badges_count">Number</string>
+    <string name="badges_off">Off</string>
+    <string name="badges_access_needed">Allow notification access</string>
+    <string name="badges_access_needed_summary">Needed to know which apps have notifications</string>
+    <string name="badges_full_build_only">Available in the full version of Haven (from app stores, or the \"-full\" APK). It needs notification access, which Google Play Protect blocks for apps installed from a browser in some countries.</string>
+    <string name="badges_disclosure_title">Notification badges</string>
+    <string name="badges_disclosure_body">To show a dot or number on app icons, Haven needs notification access.\n\nHaven only counts how many notifications each app has. It never reads, stores or sends their content, and it has no internet access.\n\nIn the next screen, turn on \"Haven notification badges\". If Android says it\'s a restricted setting, open App info for Haven, tap ⋮ and choose \"Allow restricted settings\", then try again.</string>
+
     <!-- Rename -->
     <string name="rename_title">Rename app</string>
     <string name="rename_original">Original name: %1$s</string>

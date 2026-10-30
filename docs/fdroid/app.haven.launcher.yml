@@ -1,0 +1,26 @@
+Categories:
+  - System
+  - Theming
+License: GPL-3.0-only
+AuthorName: Dhrumil Mistry
+SourceCode: https://github.com/dmdhrumilmistry/haven-launcher
+IssueTracker: https://github.com/dmdhrumilmistry/haven-launcher/issues
+Changelog: https://github.com/dmdhrumilmistry/haven-launcher/releases
+
+AutoName: Haven
+
+RepoType: git
+Repo: https://github.com/dmdhrumilmistry/haven-launcher.git
+
+Builds:
+  - versionName: 1.3.0
+    versionCode: 10300
+    commit: v1.3.0
+    subdir: app
+    gradle:
+      - full
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.3.0
+CurrentVersionCode: 10300

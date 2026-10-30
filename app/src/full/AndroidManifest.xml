@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the "full" build declares the accessibility service (double-tap to lock). -->
+<!-- Only the "full" build declares the accessibility service (double-tap to lock) and the
+     notification listener (icon badges). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <!-- Optional. Only used for "double-tap to lock" and as a notification-shade fallback. -->
@@ -14,6 +15,16 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service" />
+        </service>
+        <!-- Counts notifications per app for icon badges. Never reads or stores their content. -->
+        <service
+            android:name=".system.NotificationBadgeService"
+            android:exported="false"
+            android:label="@string/badge_service_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
     </application>
 </manifest>
