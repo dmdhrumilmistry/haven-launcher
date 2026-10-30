@@ -50,11 +50,31 @@ import java.util.Locale
 
 /** A page in the app drawer: a profile, the hidden apps, or one of the user's categories. */
 sealed interface DrawerTab {
-    data object Personal : DrawerTab
-    data object Work : DrawerTab
-    data object Private : DrawerTab
-    data object Hidden : DrawerTab
-    data class Category(val id: String) : DrawerTab
+    /**
+     * Stable string identity. Lazy layouts (the swipeable pager) save their keys in a Bundle, which
+     * only accepts simple types: using the tab object itself as a key crashes on Android.
+     */
+    val key: String
+
+    data object Personal : DrawerTab {
+        override val key get() = "personal"
+    }
+
+    data object Work : DrawerTab {
+        override val key get() = "work"
+    }
+
+    data object Private : DrawerTab {
+        override val key get() = "private"
+    }
+
+    data object Hidden : DrawerTab {
+        override val key get() = "hidden"
+    }
+
+    data class Category(val id: String) : DrawerTab {
+        override val key get() = "category:$id"
+    }
 
     companion object {
         val PERSONAL: DrawerTab = Personal
