@@ -22,8 +22,8 @@ android {
         // Bump both for every release (code = major*10000 + minor*100 + patch), and add
         // fastlane/metadata/android/en-US/changelogs/<versionCode>.txt. The release workflow checks
         // the tag matches. Kept as plain literals so F-Droid's update checker can read them.
-        versionCode = 10300
-        versionName = "1.3.0"
+        versionCode = 10400
+        versionName = "1.4.0"
     }
 
     signingConfigs {

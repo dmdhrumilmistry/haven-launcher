@@ -1,0 +1,5 @@
+• Freeze paused apps: really stops them (no background activity, no notifications) until the pause ends, using Shizuku if you set it up
+• Paused apps' notifications are held and come back when the pause ends (full version)
+• More pause options: 30 min, 2 hours, until a time; "Start now" for schedules
+• Search opens phone settings: wifi, bluetooth, battery…
+• Undo after hiding or removing an app; swipe left/right to open an app; battery next to the date
