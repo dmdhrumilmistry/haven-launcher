@@ -98,3 +98,61 @@ object Pauses {
         ZonedDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), ZoneId.systemDefault())
             .truncatedTo(ChronoUnit.DAYS).plusDays(1).toInstant().toEpochMilli()
 }
+
+/**
+ * Holding back notifications from paused apps (full build, with notification access).
+ *
+ * Android doesn't let a home screen stop another app from posting, but a notification listener
+ * can snooze what it posts. Snoozed notifications leave the shade and come back on their own when
+ * the snooze ends, so they're timed to end with the pause and nothing is lost.
+ */
+object NotificationHold {
+    /**
+     * A pause "until I unpause" holds notifications a day at a time: Android has no way to bring a
+     * snoozed notification back early, so an open-ended snooze could hide them for good.
+     */
+    const val MAX_HOLD_MS = 24L * 60 * 60 * 1000
+
+    /** Brought back a moment after the pause ends, so they don't land in its last second. */
+    private const val GRACE_MS = 3_000L
+
+    /** Notification key ("package#userSerial", as for badges) of an app key ("pkg/cls#serial"). */
+    fun packageKey(appKey: String): String? {
+        val hash = appKey.lastIndexOf('#')
+        val slash = appKey.indexOf('/')
+        if (hash <= 0 || slash <= 0 || slash > hash) return null
+        val serial = appKey.substring(hash + 1).toLongOrNull() ?: return null
+        return "${appKey.substring(0, slash)}#$serial"
+    }
+
+    /**
+     * Packages paused right now, with when their pause ends. Pausing any of a package's launcher
+     * entries holds its notifications; if several are paused, the latest end wins.
+     */
+    fun pausedPackages(pauses: Map<String, PauseState>): Map<String, Long> {
+        val result = HashMap<String, Long>()
+        for ((appKey, state) in pauses) {
+            val key = packageKey(appKey) ?: continue
+            result[key] = maxOf(result[key] ?: 0L, state.until)
+        }
+        return result
+    }
+
+    /** How long to hold a notification posted at [now] for a pause ending at [until]; null if not worth it. */
+    fun holdDuration(until: Long, now: Long): Long? {
+        if (until == Pauses.FOREVER) return MAX_HOLD_MS
+        val left = until - now
+        if (left <= GRACE_MS) return null
+        return (left + GRACE_MS).coerceAtMost(MAX_HOLD_MS)
+    }
+}
+
+/** What the home screen says about paused apps: how many, and when the next pause ends. */
+data class PauseSummary(val count: Int, val nextEnd: Long) {
+    companion object {
+        fun of(pauses: Map<String, PauseState>): PauseSummary? {
+            if (pauses.isEmpty()) return null
+            return PauseSummary(pauses.size, pauses.values.minOf { it.until })
+        }
+    }
+}

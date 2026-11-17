@@ -102,6 +102,8 @@ fun AppActionsSheet(
     onUnpause: (() -> Unit)? = null,
     /** Digital Wellbeing's app timer for this app; null where unavailable. */
     onAppTimer: (() -> Unit)? = null,
+    /** Frozen by Haven (suspended and stopped through Shizuku). */
+    isFrozen: Boolean = false,
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -127,7 +129,8 @@ fun AppActionsSheet(
                         profileLabel(item.profileType),
                         item.app.systemLabel.takeIf { it != item.label },
                         stringResource(R.string.app_paused).takeIf { item.isPaused },
-                        stringResource(R.string.app_suspended).takeIf { item.app.isSuspended },
+                        stringResource(R.string.app_frozen).takeIf { isFrozen },
+                        stringResource(R.string.app_suspended).takeIf { item.app.isSuspended && !isFrozen },
                         pauseState?.let { pauseDescription(it) },
                     ).joinToString(" · ")
                     if (secondary.isNotEmpty()) {

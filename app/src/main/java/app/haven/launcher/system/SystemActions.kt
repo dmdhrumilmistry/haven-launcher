@@ -159,8 +159,20 @@ object SystemActions {
         safeStart(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
-    fun openLauncherSettings(context: Context) {
-        safeStart(context, Intent(context, app.haven.launcher.ui.settings.SettingsActivity::class.java))
+    /** Haven's settings, optionally on a page (see SettingsActivity.EXTRA_PAGE). */
+    fun openLauncherSettings(context: Context, page: String? = null) {
+        val intent = Intent(context, app.haven.launcher.ui.settings.SettingsActivity::class.java)
+        if (page != null) intent.putExtra(app.haven.launcher.ui.settings.SettingsActivity.EXTRA_PAGE, page)
+        safeStart(context, intent)
+    }
+
+    /** The system screen to turn an app's notifications off. Only for apps in Haven's own profile. */
+    fun openAppNotificationSettings(context: Context, packageName: String) {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (!safeStart(context, intent, showError = false)) {
+            safeStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+        }
     }
 
     // ---- Default home app ----

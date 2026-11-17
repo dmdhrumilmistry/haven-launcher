@@ -28,8 +28,13 @@ These are off until you turn them on, and only exist in the "full" version:
 
 - **Accessibility service** (double-tap to lock): only used to lock the screen and open the
   notification shade when you ask with a gesture. It does not read what's on your screen.
-- **Notification access** (icon badges): only used to count how many notifications each app has.
-  Haven never reads, stores or shares notification content.
+- **Notification access** (icon badges, and holding notifications from paused apps): only used to
+  count how many notifications each app has, and to snooze those from apps you paused until the
+  pause ends. Haven only looks at which app a notification is from; it never reads, stores or
+  shares notification content.
+
+- **Shizuku** (optional, only if you install it and allow Haven there): used only to freeze and
+  unfreeze the apps you pause. Haven runs no other commands with it.
 
 Other permissions: expanding the status bar (swipe down for notifications), opening the system
 uninstall dialog, fingerprint/face prompt (for locked hidden apps), and seeing Android 15's private

@@ -77,6 +77,12 @@ class SettingsRepository(context: Context) {
         s.copy(widgets = list)
     }
 
+    /** Pauses several apps at once, e.g. starting a schedule's apps right now. */
+    fun pauseApps(appKeys: Collection<String>, until: Long) = update { s ->
+        val now = System.currentTimeMillis()
+        s.copy(pausedApps = s.pausedApps.filterValues { it > now } + appKeys.associateWith { until })
+    }
+
     fun pauseApp(appKey: String, until: Long) = update { s ->
         val now = System.currentTimeMillis()
         // Drop expired pauses while we're here so the store doesn't grow forever.

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,6 +75,10 @@ import app.haven.launcher.ui.HomeEntry
 import app.haven.launcher.ui.components.AppIcon
 import app.haven.launcher.ui.components.FolderIcon
 import app.haven.launcher.ui.components.LocalPausedApps
+import app.haven.launcher.focus.PauseSummary
+import app.haven.launcher.focus.Pauses
+import app.haven.launcher.focus.formatUntil
+import androidx.compose.ui.platform.LocalResources
 import app.haven.launcher.ui.components.ShortcutIcon
 import app.haven.launcher.ui.components.windowRect
 
@@ -88,6 +93,10 @@ class HomeCallbacks(
     val onBackgroundLongPress: () -> Unit,
     val onReorder: (List<String>) -> Unit,
     val onMerge: (draggedId: String, targetId: String) -> Unit,
+    /** Tapping the "apps paused" line under the clock. */
+    val onOpenPauses: () -> Unit = {},
+    /** Swipe left (true) or right (false) anywhere on the home screen; null when neither is set. */
+    val onSwipeSide: ((left: Boolean) -> Unit)? = null,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -100,6 +109,8 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     /** Widgets, if any. Gets a modifier that bounds its height so app icons always stay visible. */
     widgetContent: (@Composable (Modifier) -> Unit)? = null,
+    /** Apps paused right now, for the small status line; null hides it. */
+    pauseSummary: PauseSummary? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val cb by rememberUpdatedState(callbacks)
@@ -153,6 +164,30 @@ fun HomeScreen(
                     },
                 )
             }
+            .pointerInput(callbacks.onSwipeSide != null) {
+                if (callbacks.onSwipeSide == null) return@pointerInput
+                val tracker = VelocityTracker()
+                var total = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        total = 0f
+                    },
+                    onDragEnd = {
+                        val velocity = tracker.calculateVelocity().x
+                        val far = kotlin.math.abs(total) > 64.dp.toPx()
+                        if (far || kotlin.math.abs(velocity) > 1200f) {
+                            haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                            cb.onSwipeSide?.invoke(if (far) total < 0 else velocity < 0)
+                        }
+                    },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        total += dx
+                    },
+                )
+            }
             .pointerInput(Unit) {
                 val tracker = VelocityTracker()
                 var total = 0f
@@ -182,6 +217,10 @@ fun HomeScreen(
             if (settings.showClock || settings.showDate) {
                 Spacer(Modifier.height(32.dp))
                 ClockBlock(settings, contentColor, shadow, textAlign, horizontal)
+            }
+            if (pauseSummary != null) {
+                Spacer(Modifier.height(if (settings.showClock || settings.showDate) 10.dp else 24.dp))
+                PauseStatus(pauseSummary, contentColor, shadow, cb.onOpenPauses)
             }
 
             if (widgetContent != null) {
@@ -298,7 +337,12 @@ private fun ClockBlock(
             )
         }
         if (settings.showDate) {
-            val dateLine = if (text.alarm != null) stringResource(R.string.date_with_alarm, text.date, text.alarm) else text.date
+            val battery = if (settings.showBattery) rememberBattery() else null
+            val withAlarm = if (text.alarm != null) stringResource(R.string.date_with_alarm, text.date, text.alarm) else text.date
+            val dateLine = if (battery == null) withAlarm else "$withAlarm · " + stringResource(
+                if (battery.charging) R.string.battery_charging else R.string.battery_level,
+                battery.percent,
+            )
             Text(
                 dateLine,
                 color = color.copy(alpha = 0.85f),
@@ -417,3 +461,29 @@ private fun EntryIcon(entry: HomeEntry, size: androidx.compose.ui.unit.Dp) {
 }
 
 private fun Color.luminanceIsLight(): Boolean = (0.2126f * red + 0.7152f * green + 0.0722f * blue) > 0.5f
+
+/** "2 apps paused · next ends 5:00 PM": a quiet reminder that's also the way to undo it. */
+@Composable
+private fun PauseStatus(summary: PauseSummary, color: Color, shadow: Shadow, onClick: () -> Unit) {
+    val resources = LocalResources.current
+    val text = if (summary.nextEnd == Pauses.FOREVER) {
+        resources.getQuantityString(R.plurals.paused_apps_status_open, summary.count, summary.count)
+    } else {
+        resources.getQuantityString(R.plurals.paused_apps_status, summary.count, summary.count, formatUntil(summary.nextEnd))
+    }
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.12f))
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.settings_pauses), onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // A small "pause" mark: two bars. Core icons don't include one.
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            repeat(2) { Box(Modifier.size(width = 3.dp, height = 11.dp).background(color.copy(alpha = 0.85f), RoundedCornerShape(1.dp))) }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(text, color = color.copy(alpha = 0.9f), style = TextStyle(fontSize = 13.sp, shadow = shadow), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}

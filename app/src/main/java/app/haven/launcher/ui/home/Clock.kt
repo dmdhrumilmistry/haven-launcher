@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color as AndroidColor
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -22,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import app.haven.launcher.data.ClockFormat
 import java.util.Date
+import kotlin.math.roundToInt
 import java.util.Locale
 
 /** Current time, updated every minute and whenever the clock or time zone changes. */
@@ -72,6 +74,39 @@ fun rememberNextAlarm(): State<Long?> {
         onDispose { context.unregisterReceiver(receiver) }
     }
     return alarm
+}
+
+data class BatteryState(val percent: Int, val charging: Boolean)
+
+/** Battery level and whether it's charging. Battery broadcasts need no permission. */
+@Composable
+fun rememberBattery(): BatteryState? {
+    val context = LocalContext.current
+    val state = remember { mutableStateOf<BatteryState?>(null) }
+    DisposableEffect(context) {
+        fun read(i: Intent?) {
+            if (i == null) return
+            val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            if (level < 0 || scale <= 0) return
+            val status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            state.value = BatteryState(
+                percent = (level * 100f / scale).roundToInt(),
+                charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
+            )
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) = read(i)
+        }
+        // Sticky: registering returns the current state straight away.
+        read(
+            ContextCompat.registerReceiver(
+                context, receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED,
+            ),
+        )
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+    return state.value
 }
 
 data class ClockText(val time: String, val date: String, val alarm: String?)

@@ -34,6 +34,6 @@ Haven is a calm, clean home screen that feels like stock Android, with the featu
 • Rename apps; export and import all your settings
 
 <b>Permissions, plainly</b>
-Haven has no internet access. Double-tap to lock uses an accessibility service only to lock the screen; notification badges only count notifications and never read them. Both are off until you turn them on.
+Haven has no internet access. Double-tap to lock uses an accessibility service only to lock the screen; notification access is only used for badges and to hold notifications from paused apps until the pause ends, and never reads them. Both are off until you turn them on.
 
 Haven is free and open source (GPL-3.0).

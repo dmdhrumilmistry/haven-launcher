@@ -18,6 +18,9 @@ import app.haven.launcher.data.DrawerFolder
 import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.focus.PauseState
 import app.haven.launcher.focus.Pauses
+import app.haven.launcher.focus.NotificationHold
+import app.haven.launcher.system.NotificationBadges
+import android.text.format.DateUtils
 import app.haven.launcher.data.Calculator
 import app.haven.launcher.data.LaunchStats
 import app.haven.launcher.data.HomeItem
@@ -26,6 +29,8 @@ import app.haven.launcher.data.LauncherSettings
 import app.haven.launcher.data.Profile
 import app.haven.launcher.data.ProfileType
 import app.haven.launcher.data.Search
+import app.haven.launcher.data.SettingResult
+import app.haven.launcher.data.SettingsSearch
 import app.haven.launcher.haven
 import app.haven.launcher.system.LauncherAccessibilityService
 import app.haven.launcher.system.SystemActions
@@ -140,6 +145,8 @@ data class SearchState(
     val calculation: String? = null,
     /** Hidden apps are searchable but locked: offer to unlock instead of silently leaving them out. */
     val canUnlockHidden: Boolean = false,
+    /** Phone settings screens matching the query ("wifi" -> Wi-Fi). */
+    val settings: List<SettingResult> = emptyList(),
 )
 
 /** One-off UI requests that need a dialog. */
@@ -155,6 +162,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val settingsRepo = application.haven.settings
     private val appsRepo = application.haven.apps
     private val launchStats = application.haven.launchStats
+    val freezer = application.haven.freezer
 
     val settings: StateFlow<LauncherSettings> = settingsRepo.settings
     val snapshot: StateFlow<AppsSnapshot> = appsRepo.snapshot
@@ -205,19 +213,23 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         _hiddenUnlocked.value = unlocked
     }
 
+    /** Settings screens this phone can open; resolved once, on first search. */
+    private val settingScreens by lazy { SettingsSearch.available(app) }
+
     /** Results tagged with the query that produced them, so nothing acts on stale results. */
     val search: StateFlow<SearchState> =
         combine(
             _query,
             allApps,
-            settings.map { it.searchHiddenApps to it.lockHiddenApps }.distinctUntilChanged(),
+            settings.map { Triple(it.searchHiddenApps, it.lockHiddenApps, it.searchSettings) }.distinctUntilChanged(),
             _hiddenUnlocked,
-        ) { q, apps, (searchHidden, locked), unlocked ->
+        ) { q, apps, (searchHidden, locked, searchSettings), unlocked ->
             val includeHidden = searchHidden && (!locked || unlocked)
             SearchState(
                 query = q,
                 calculation = if (q.isBlank()) null else Calculator.evaluate(q),
                 canUnlockHidden = q.isNotBlank() && searchHidden && locked && !unlocked,
+                settings = if (q.isBlank() || !searchSettings) emptyList() else SettingsSearch.search(app, settingScreens, q),
                 results = if (q.isBlank()) emptyList() else apps.asSequence()
                 .filter { (includeHidden || !it.isHidden) && it.app.profile.isVisible }
                 .map { it to Search.score(it.search, q) }
@@ -329,8 +341,16 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return launchNow(item, view, bounds)
     }
 
-    /** Skips the pause check: for "Open anyway". */
+    /** Skips the pause check: for "Open anyway". A frozen app is unfrozen first. */
     fun launchNow(item: AppItem, view: View? = null, bounds: Rect? = null): Boolean {
+        val packageKey = NotificationHold.packageKey(item.key)
+        if (packageKey != null && packageKey in freezer.frozen.value) {
+            viewModelScope.launch {
+                freezer.thawForLaunch(packageKey)
+                if (SystemActions.launchApp(app, item.app, view, bounds)) stats.recordLaunch(item.key)
+            }
+            return true
+        }
         val ok = SystemActions.launchApp(app, item.app, view, bounds)
         if (ok) stats.recordLaunch(item.key) else appsRepo.reload()
         return ok
@@ -341,6 +361,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     fun launchShortcut(info: ShortcutInfo, view: View? = null, bounds: Rect? = null): Boolean =
         SystemActions.launchShortcut(app, info, view, bounds)
+
+    fun openSetting(result: SettingResult) {
+        if (result.id == SettingsSearch.HAVEN) SystemActions.openLauncherSettings(app)
+        else SystemActions.safeStart(app, SettingsSearch.intentFor(result))
+    }
 
     suspend fun shortcutsFor(item: AppItem): List<ShortcutInfo> =
         withContext(Dispatchers.IO) { appsRepo.shortcutsFor(item.app) }
@@ -619,9 +644,23 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         clock.value = System.currentTimeMillis()
     }
 
-    fun unpauseApp(item: AppItem) {
-        settingsRepo.unpauseApp(item.key)
+    fun unpauseApp(item: AppItem) = unpause(item.key)
+
+    /**
+     * Lifts a manual pause. Android can't bring snoozed notifications back early, so if some
+     * were held, say when they'll come back rather than leave people wondering.
+     */
+    fun unpause(appKey: String) {
+        settingsRepo.unpauseApp(appKey)
         clock.value = System.currentTimeMillis()
+        val packageKey = NotificationHold.packageKey(appKey) ?: return
+        val held = NotificationBadges.held.value[packageKey] ?: return
+        // From the settings just saved: the pauses flow recomputes in the background.
+        val now = settingsRepo.settings.value.let { Pauses.compute(it.pausedApps, it.pauseSchedules, System.currentTimeMillis()) }
+        if (held.count > 0 && packageKey !in NotificationHold.pausedPackages(now)) {
+            val time = DateUtils.formatDateTime(app, held.returnsAt, DateUtils.FORMAT_SHOW_TIME)
+            SystemActions.toast(app, app.getString(R.string.held_return_at, time))
+        }
     }
 
     companion object {
