@@ -46,7 +46,17 @@ import androidx.compose.ui.unit.dp
 import app.haven.launcher.R
 import app.haven.launcher.data.AppItem
 import app.haven.launcher.data.Search
+import app.haven.launcher.system.HeldNotifications
+import app.haven.launcher.system.SystemActions
 import app.haven.launcher.ui.components.AppIcon
+import app.haven.launcher.ui.components.badgeKey
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import java.time.DayOfWeek
 import java.time.format.TextStyle
 
@@ -83,44 +93,132 @@ fun pauseDescription(state: PauseState): String = when (state) {
     )
 }
 
-/** "Pause for an hour / for today / until I unpause". */
+/** Whether a pause also holds the app's notifications, and if not, why not. */
+enum class HoldStatus { HELD, OFF, NEEDS_ACCESS, UNAVAILABLE }
+
+/** Next time the clock shows [minuteOfDay]: today if it's still ahead, otherwise tomorrow. */
+fun nextOccurrence(minuteOfDay: Int, nowMillis: Long): Long {
+    val now = java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(nowMillis), java.time.ZoneId.systemDefault())
+    var at = now.truncatedTo(java.time.temporal.ChronoUnit.DAYS).plusMinutes(minuteOfDay.toLong())
+    if (!at.isAfter(now)) at = at.plusDays(1)
+    return at.toInstant().toEpochMilli()
+}
+
+/**
+ * "Pause for an hour / for today / until I unpause / until a time". Says plainly what pausing does
+ * to notifications, and where to go to stop the app for real (Android doesn't let us).
+ */
 @Composable
-fun PauseChooserDialog(app: AppItem, onPause: (until: Long) -> Unit, onDismiss: () -> Unit) {
+fun PauseChooserDialog(
+    app: AppItem,
+    holdStatus: HoldStatus,
+    onPause: (until: Long) -> Unit,
+    onDismiss: () -> Unit,
+    onAllowAccess: () -> Unit = {},
+) {
+    val context = LocalContext.current
     val now = remember { System.currentTimeMillis() }
+    var pickTime by remember { mutableStateOf(false) }
     val options = listOf(
         stringResource(R.string.pause_15_min) to now + 15 * 60_000L,
+        stringResource(R.string.pause_30_min) to now + 30 * 60_000L,
         stringResource(R.string.pause_1_hour) to now + 60 * 60_000L,
+        stringResource(R.string.pause_2_hours) to now + 2 * 60 * 60_000L,
         stringResource(R.string.pause_today) to Pauses.endOfToday(now),
         stringResource(R.string.pause_forever) to Pauses.FOREVER,
     )
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.pause_title, app.label)) },
+        icon = { AppIcon(app, 40.dp) },
+        title = { Text(stringResource(R.string.pause_title, app.label), textAlign = TextAlign.Center) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    stringResource(R.string.pause_explainer),
+                    stringResource(if (holdStatus == HoldStatus.HELD) R.string.pause_explainer_held else R.string.pause_explainer),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = muted,
                 )
-                Spacer(Modifier.padding(4.dp))
+                Spacer(Modifier.height(8.dp))
                 options.forEach { (label, until) ->
-                    Text(
-                        label,
+                    PauseOption(label, if (until == Pauses.FOREVER) null else formatUntil(until)) {
+                        onPause(until)
+                        onDismiss()
+                    }
+                }
+                PauseOption(stringResource(R.string.pause_until_time), null) { pickTime = true }
+                when (holdStatus) {
+                    HoldStatus.NEEDS_ACCESS -> Text(
+                        stringResource(R.string.pause_hold_needs_access),
                         Modifier
                             .fillMaxWidth()
-                            .clickable(role = Role.Button) {
-                                onPause(until)
-                                onDismiss()
-                            }
-                            .padding(vertical = 14.dp),
-                        style = MaterialTheme.typography.bodyLarge,
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(role = Role.Button, onClick = onAllowAccess)
+                            .padding(vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
                     )
+                    HoldStatus.OFF -> Text(
+                        stringResource(R.string.pause_hold_off),
+                        Modifier.padding(vertical = 10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = muted,
+                    )
+                    else -> Unit
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Text(stringResource(R.string.pause_background_hint), style = MaterialTheme.typography.bodySmall, color = muted)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    // The system's per-app notification screen only covers Haven's own profile.
+                    if (SystemActions.isMyUser(app.app.user)) {
+                        TextButton(onClick = { SystemActions.openAppNotificationSettings(context, app.app.packageName) }) {
+                            Text(stringResource(R.string.action_notification_settings))
+                        }
+                    }
+                    TextButton(onClick = { SystemActions.openAppInfo(context, app.app.component, app.app.user) }) {
+                        Text(stringResource(R.string.action_force_stop))
+                    }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
     )
+    if (pickTime) {
+        TimeDialog(
+            // An hour from now, rounded down to the quarter hour.
+            initialMinute = java.time.LocalTime.now().plusHours(1).let { it.hour * 60 + it.minute / 15 * 15 },
+            onPick = { minute ->
+                onPause(nextOccurrence(minute, System.currentTimeMillis()))
+                onDismiss()
+            },
+            onDismiss = { pickTime = false },
+        )
+    }
+}
+
+@Composable
+private fun PauseOption(label: String, detail: String?, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        if (detail != null) {
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** "3 notifications held until 5:00 PM", or null when nothing is held. */
+@Composable
+fun heldDescription(held: HeldNotifications?): String? {
+    if (held == null || held.count <= 0) return null
+    val count = LocalResources.current.getQuantityString(R.plurals.held_notifications, held.count, held.count)
+    return stringResource(R.string.held_count_until, count, formatUntil(held.returnsAt))
 }
 
 /** Shown when tapping a paused app. A speed bump, not a wall. */
@@ -128,6 +226,7 @@ fun PauseChooserDialog(app: AppItem, onPause: (until: Long) -> Unit, onDismiss: 
 fun AppPausedDialog(
     app: AppItem,
     state: PauseState,
+    held: HeldNotifications?,
     onOpenAnyway: () -> Unit,
     onUnpause: () -> Unit,
     onDismiss: () -> Unit,
@@ -135,8 +234,16 @@ fun AppPausedDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { AppIcon(app, 40.dp) },
-        title = { Text(stringResource(R.string.app_is_paused, app.label)) },
-        text = { Text(pauseDescription(state)) },
+        title = { Text(stringResource(R.string.app_is_paused, app.label), textAlign = TextAlign.Center) },
+        text = {
+            Column {
+                Text(pauseDescription(state))
+                heldDescription(held)?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = {
                 onDismiss()
@@ -158,20 +265,23 @@ fun AppPausedDialog(
     )
 }
 
-/** Settings page: apps paused right now, plus the list of schedules. */
+/** Settings page: every app paused right now (by hand or by a schedule), plus the schedules. */
 @Composable
 fun PausesPage(
     apps: List<AppItem>,
-    pausedApps: Map<String, Long>,
+    pauses: Map<String, PauseState>,
+    held: Map<String, HeldNotifications>,
     schedules: List<PauseSchedule>,
     onUnpause: (String) -> Unit,
     onToggleSchedule: (PauseSchedule, Boolean) -> Unit,
     onEditSchedule: (PauseSchedule) -> Unit,
     onAddSchedule: () -> Unit,
+    notificationControls: @Composable () -> Unit = {},
 ) {
-    val now = remember { System.currentTimeMillis() }
     val byKey = remember(apps) { apps.associateBy { it.key } }
-    val manual = pausedApps.filterValues { it > now }.mapNotNull { (k, until) -> byKey[k]?.let { it to until } }
+    val paused = remember(pauses, byKey) {
+        pauses.mapNotNull { (k, state) -> byKey[k]?.let { it to state } }.sortedBy { it.second.until }
+    }
     LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
         item {
             Text(
@@ -181,23 +291,29 @@ fun PausesPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        item { notificationControls() }
         item { Header(stringResource(R.string.pauses_now)) }
-        if (manual.isEmpty()) {
+        if (paused.isEmpty()) {
             item { Muted(stringResource(R.string.pauses_none)) }
         }
-        items(manual, key = { "m:" + it.first.key }) { (app, until) ->
+        items(paused, key = { "p:" + it.first.key }) { (app, state) ->
             Row(Modifier.padding(start = 24.dp, end = 12.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 AppIcon(app, 36.dp)
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        pauseDescription(PauseState.Manual(until)),
+                        pauseDescription(state),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    heldDescription(held[app.badgeKey()])?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
-                TextButton(onClick = { onUnpause(app.key) }) { Text(stringResource(R.string.action_unpause)) }
+                if (state is PauseState.Manual) {
+                    TextButton(onClick = { onUnpause(app.key) }) { Text(stringResource(R.string.action_unpause)) }
+                }
             }
         }
         item { Header(stringResource(R.string.schedules)) }

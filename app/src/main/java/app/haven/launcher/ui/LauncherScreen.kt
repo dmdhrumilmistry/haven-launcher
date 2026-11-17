@@ -95,7 +95,23 @@ import app.haven.launcher.data.ProfileType
 import app.haven.launcher.system.CloneSupport
 import app.haven.launcher.system.DeviceAuth
 import app.haven.launcher.system.findComponentActivity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.ui.Alignment
+import app.haven.launcher.focus.HoldStatus
+import app.haven.launcher.focus.PauseSummary
+import app.haven.launcher.system.HeldNotifications
+import app.haven.launcher.ui.components.NotificationAccessDisclosure
+import app.haven.launcher.ui.components.badgeKey
+import app.haven.launcher.ui.settings.SettingsActivity
 import kotlinx.coroutines.launch
 
 private const val VELOCITY_THRESHOLD = 1200f
@@ -116,7 +132,10 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val hiddenUnlocked by vm.hiddenUnlocked.collectAsStateWithLifecycle()
     val pauses by vm.pauses.collectAsStateWithLifecycle()
     val badgeCounts by NotificationBadges.counts.collectAsStateWithLifecycle()
+    val heldNotifications by NotificationBadges.held.collectAsStateWithLifecycle()
     var pauseTarget by remember { mutableStateOf<AppItem?>(null) }
+    var accessDisclosure by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
     // Open folder (home or drawer), and the folder an app menu was opened from.
     var openFolder by remember { mutableStateOf<FolderRef?>(null) }
     var sheetFolder by remember { mutableStateOf<FolderRef?>(null) }
@@ -185,7 +204,11 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
 
     // ---- Lifecycle ----
 
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
+    var notificationAccess by remember { mutableStateOf(NotificationBadges.hasAccess(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.onResume()
+        notificationAccess = NotificationBadges.hasAccess(context)
+    }
     // Coming back from an app should land on a calm home screen, not a half-finished search.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         // Hidden apps relock as soon as the home screen leaves view.
@@ -198,6 +221,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
         renameApp = null
         homeMenu = false
         sheetWidget = null
+        accessDisclosure = false
+        snackbar.currentSnackbarData?.dismiss()
         resetDrawer(animate = false)
     }
     LaunchedEffect(Unit) {
@@ -326,6 +351,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             onBackgroundLongPress = { homeMenu = true },
             onReorder = vm::reorderHome,
             onMerge = vm::dropOnHome,
+            onOpenPauses = { SystemActions.openLauncherSettings(context, SettingsActivity.PAGE_PAUSES) },
         )
     }
 
@@ -343,6 +369,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             onOpenSettings = { SystemActions.openLauncherSettings(context) },
             onOpenFolder = { entry -> openFolder = FolderRef(home = false, id = entry.folder.id) },
             onDropApp = vm::dropInDrawer,
+            onOpenSetting = vm::openSetting,
             onUnlockHidden = {
                 context.findComponentActivity()?.let { activity ->
                     DeviceAuth.authenticate(activity, resources.getString(R.string.auth_hidden_title), null) {
@@ -366,9 +393,15 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                     .background(Color.Black.copy(alpha = settings.wallpaperDim)),
             ) {
                 if (showHome) {
+                    // Only apps that are actually installed count, not leftovers in a schedule.
+                    val pauseSummary = remember(pauses, allApps, settings.showPauseStatus) {
+                        if (!settings.showPauseStatus) null
+                        else allApps.mapTo(HashSet()) { it.key }.let { keys -> PauseSummary.of(pauses.filterKeys { it in keys }) }
+                    }
                     HomeScreen(
                         settings = settings,
                         entries = homeEntries,
+                        pauseSummary = pauseSummary,
                         contentColor = homeColor,
                         callbacks = homeCallbacks,
                         widgetContent = if (settings.widgets.isEmpty()) null else { widgetModifier ->
@@ -424,6 +457,14 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 }
 
                 AutoLaunch(settings.autoLaunchSingleResult, search) { vm.launch(it, view, null) }
+
+                SnackbarHost(
+                    snackbar,
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(horizontal = 12.dp, vertical = 64.dp),
+                )
             }
 
             // ---- Sheets & dialogs ----
@@ -445,8 +486,15 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         SystemActions.toast(context, resources.getString(R.string.added_to_home))
                     },
                     onToggleFavorite = {
+                        val before = settings.favorites
+                        val removing = settings.isFavorite(live.key)
                         vm.toggleFavorite(live)
                         sheetApp = null
+                        if (removing) {
+                            showUndo(scope, snackbar, resources.getString(R.string.removed_from_home, live.label), resources.getString(R.string.action_undo)) {
+                                repo.update { s -> if (s.isFavorite(live.key)) s else s.copy(favorites = before) }
+                            }
+                        }
                     },
                     onRename = {
                         renameApp = live
@@ -484,9 +532,18 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         }
                     } else null,
                     onToggleHidden = {
-                        vm.setHidden(live, !live.isHidden)
-                        if (!live.isHidden) SystemActions.toast(context, resources.getString(R.string.hidden_toast, live.label))
+                        val before = settings.favorites
+                        val hiding = !live.isHidden
+                        vm.setHidden(live, hiding)
                         sheetApp = null
+                        if (hiding) {
+                            // Hiding also takes it off the home screen; undo puts both back.
+                            showUndo(scope, snackbar, resources.getString(R.string.hidden_toast, live.label), resources.getString(R.string.action_undo)) {
+                                repo.update { s ->
+                                    s.copy(hiddenApps = s.hiddenApps - live.key, favorites = if (s.isFavorite(live.key)) s.favorites else before)
+                                }
+                            }
+                        }
                     },
                     onDismiss = { sheetApp = null },
                 )
@@ -608,11 +665,35 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             }
 
             pauseTarget?.let { app ->
-                PauseChooserDialog(app, onPause = { until -> vm.pauseApp(app, until) }, onDismiss = { pauseTarget = null })
+                val holdStatus = when {
+                    !BuildConfig.NOTIFICATION_BADGES -> HoldStatus.UNAVAILABLE
+                    !settings.holdPausedNotifications -> HoldStatus.OFF
+                    !notificationAccess -> HoldStatus.NEEDS_ACCESS
+                    else -> HoldStatus.HELD
+                }
+                PauseChooserDialog(
+                    app,
+                    holdStatus = holdStatus,
+                    onPause = { until -> vm.pauseApp(app, until) },
+                    onDismiss = { pauseTarget = null },
+                    onAllowAccess = { accessDisclosure = true },
+                )
+            }
+            if (accessDisclosure) {
+                NotificationAccessDisclosure(onDismiss = { accessDisclosure = false })
             }
 
-            PromptDialog(prompt, vm, view)
+            PromptDialog(prompt, vm, view, heldNotifications)
         }
+    }
+}
+
+/** A short message with an Undo button; replaces any message already showing. */
+private fun showUndo(scope: CoroutineScope, host: SnackbarHostState, message: String, undoLabel: String, onUndo: () -> Unit) {
+    host.currentSnackbarData?.dismiss()
+    scope.launch {
+        val result = host.showSnackbar(message, actionLabel = undoLabel, withDismissAction = true, duration = SnackbarDuration.Short)
+        if (result == SnackbarResult.ActionPerformed) onUndo()
     }
 }
 
@@ -638,13 +719,19 @@ private fun AutoLaunch(enabled: Boolean, search: SearchState, launch: (AppItem) 
 }
 
 @Composable
-private fun PromptDialog(prompt: LauncherPrompt?, vm: LauncherViewModel, view: android.view.View) {
+private fun PromptDialog(
+    prompt: LauncherPrompt?,
+    vm: LauncherViewModel,
+    view: android.view.View,
+    held: Map<String, HeldNotifications>,
+) {
     val context = LocalContext.current
     when (prompt) {
         null -> Unit
         is LauncherPrompt.AppPaused -> AppPausedDialog(
             app = prompt.item,
             state = prompt.state,
+            held = held[prompt.item.badgeKey()],
             onOpenAnyway = { vm.launchNow(prompt.item, view, null) },
             onUnpause = { vm.unpauseApp(prompt.item) },
             onDismiss = vm::dismissPrompt,

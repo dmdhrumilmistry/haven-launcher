@@ -70,6 +70,7 @@ import app.haven.launcher.data.AppCategory
 import app.haven.launcher.data.BadgeStyle
 import app.haven.launcher.data.ClockFormat
 import app.haven.launcher.system.NotificationBadges
+import app.haven.launcher.ui.components.NotificationAccessDisclosure
 import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.data.ClockSize
 import app.haven.launcher.data.DoubleTapAction
@@ -115,7 +116,11 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val startPage = if (intent.getStringExtra(EXTRA_PAGE) == "home_apps") Page.HOME_APPS else Page.MAIN
+        val startPage = when (intent.getStringExtra(EXTRA_PAGE)) {
+            "home_apps" -> Page.HOME_APPS
+            PAGE_PAUSES -> Page.PAUSES
+            else -> Page.MAIN
+        }
         setContent {
             val settings by vm.settings.collectAsStateWithLifecycle()
             HavenTheme(settings) {
@@ -128,6 +133,7 @@ class SettingsActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PAGE = "page"
+        const val PAGE_PAUSES = "pauses"
         const val REQUEST_HOME_ROLE = 7
     }
 }
@@ -191,11 +197,15 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                 Page.PAUSES -> {
                     val apps by vm.allApps.collectAsStateWithLifecycle()
                     val repo = LocalContext.current.haven.settings
+                    val pauses by vm.pauses.collectAsStateWithLifecycle()
+                    val held by NotificationBadges.held.collectAsStateWithLifecycle()
                     PausesPage(
                         apps = apps,
-                        pausedApps = settings.pausedApps,
+                        pauses = pauses,
+                        held = held,
                         schedules = settings.pauseSchedules,
-                        onUnpause = repo::unpauseApp,
+                        onUnpause = vm::unpause,
+                        notificationControls = { NotificationHoldControls(settings) },
                         onToggleSchedule = { sch, on -> repo.upsertSchedule(sch.copy(enabled = on)) },
                         onEditSchedule = {
                             editingSchedule = it.id
@@ -585,11 +595,19 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
         // ---- Pausing ----
         item { SectionHeader(stringResource(R.string.section_pausing)) }
         item {
-            val active = s.pausedApps.count { it.value > System.currentTimeMillis() }
+            val pauses by vm.pauses.collectAsStateWithLifecycle()
             ClickRow(
                 stringResource(R.string.settings_pauses),
-                stringResource(R.string.settings_pauses_summary, active, s.pauseSchedules.count { it.enabled }),
+                stringResource(R.string.settings_pauses_summary, pauses.size, s.pauseSchedules.count { it.enabled }),
             ) { onOpenPage(Page.PAUSES) }
+        }
+        item {
+            SwitchRow(
+                stringResource(R.string.setting_pause_status),
+                s.showPauseStatus,
+                { v -> repo.update { it.copy(showPauseStatus = v) } },
+                summary = stringResource(R.string.setting_pause_status_summary),
+            )
         }
 
         // ---- Search ----
@@ -612,6 +630,14 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
             )
         }
         item { SwitchRow(stringResource(R.string.setting_web_search), s.showWebSearch, { v -> repo.update { it.copy(showWebSearch = v) } }) }
+        item {
+            SwitchRow(
+                stringResource(R.string.setting_search_settings),
+                s.searchSettings,
+                { v -> repo.update { it.copy(searchSettings = v) } },
+                summary = stringResource(R.string.setting_search_settings_summary),
+            )
+        }
         item {
             SwitchRow(
                 stringResource(R.string.setting_search_hidden),
@@ -777,18 +803,7 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
         )
     }
     if (showBadgeDisclosure) {
-        AlertDialog(
-            onDismissRequest = { showBadgeDisclosure = false },
-            title = { Text(stringResource(R.string.badges_disclosure_title)) },
-            text = { Text(stringResource(R.string.badges_disclosure_body)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBadgeDisclosure = false
-                    SystemActions.openNotificationAccessSettings(context)
-                }) { Text(stringResource(R.string.action_open_settings)) }
-            },
-            dismissButton = { TextButton(onClick = { showBadgeDisclosure = false }) { Text(stringResource(R.string.action_not_now)) } },
-        )
+        NotificationAccessDisclosure(onDismiss = { showBadgeDisclosure = false })
     }
     if (confirmReset) {
         ConfirmDialog(
@@ -1079,4 +1094,28 @@ private fun CategoriesPage(vm: LauncherViewModel, s: LauncherSettings) {
             onDismiss = { deleting = null },
         )
     }
+}
+
+/** On the pauses page: hold notifications from paused apps (full build), and the access it needs. */
+@Composable
+private fun NotificationHoldControls(s: LauncherSettings) {
+    val context = LocalContext.current
+    val repo = context.haven.settings
+    if (!BuildConfig.NOTIFICATION_BADGES) {
+        InfoRow(stringResource(R.string.setting_hold_notifications), stringResource(R.string.hold_full_build_only))
+        return
+    }
+    var access by remember { mutableStateOf(NotificationBadges.hasAccess(context)) }
+    var disclosure by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { access = NotificationBadges.hasAccess(context) }
+    SwitchRow(
+        stringResource(R.string.setting_hold_notifications),
+        s.holdPausedNotifications,
+        { v -> repo.update { it.copy(holdPausedNotifications = v) } },
+        summary = stringResource(R.string.setting_hold_notifications_summary),
+    )
+    if (s.holdPausedNotifications && !access) {
+        ClickRow(stringResource(R.string.badges_access_needed), stringResource(R.string.pause_hold_needs_access)) { disclosure = true }
+    }
+    if (disclosure) NotificationAccessDisclosure(onDismiss = { disclosure = false })
 }

@@ -7,6 +7,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.haven.launcher.data.LauncherSettings
+import app.haven.launcher.data.SettingResult
+import org.junit.Assert.assertEquals
 import app.haven.launcher.ui.drawer.AppDrawer
 import app.haven.launcher.ui.drawer.DrawerCallbacks
 import org.junit.Rule
@@ -37,20 +39,26 @@ class DrawerSmokeTest {
         onDropApp = { _, _ -> },
     )
 
-    private fun drawer(tabs: List<DrawerTab>, selected: DrawerTab = DrawerTab.PERSONAL) {
+    private fun drawer(
+        tabs: List<DrawerTab>,
+        selected: DrawerTab = DrawerTab.PERSONAL,
+        query: String = "",
+        search: SearchState = SearchState("", emptyList()),
+        callbacks: DrawerCallbacks = noCallbacks,
+    ) {
         compose.setContent {
             AppDrawer(
                 settings = LauncherSettings(),
                 model = DrawerModel(tabs = tabs, categoryNames = mapOf("games" to "Games")),
                 loaded = true,
                 selectedTab = selected,
-                query = "",
-                search = SearchState("", emptyList()),
+                query = query,
+                search = search,
                 suggestions = emptyList(),
                 newApps = emptySet(),
                 hiddenUnlocked = false,
                 searchFocus = remember { FocusRequester() },
-                callbacks = noCallbacks,
+                callbacks = callbacks,
             )
         }
     }
@@ -78,5 +86,33 @@ class DrawerSmokeTest {
     fun opensWithSingleTab() {
         drawer(listOf(DrawerTab.PERSONAL))
         compose.onNodeWithText("Search apps").assertExists()
+    }
+
+    @Test
+    fun searchShowsPhoneSettingsAndOpensThem() {
+        var opened: SettingResult? = null
+        val wifi = SettingResult("wifi", "Wi-Fi", "android.settings.WIFI_SETTINGS")
+        drawer(
+            listOf(DrawerTab.PERSONAL),
+            query = "wifi",
+            search = SearchState("wifi", emptyList(), settings = listOf(wifi)),
+            callbacks = DrawerCallbacks(
+                onQueryChange = {},
+                onSelectTab = {},
+                onLaunch = { _, _ -> },
+                onLongPress = {},
+                onSetQuiet = { _, _ -> },
+                onOpenSettings = {},
+                onUnlockHidden = {},
+                onOpenFolder = {},
+                onDropApp = { _, _ -> },
+                onOpenSetting = { opened = it },
+            ),
+        )
+        compose.onNodeWithText("Settings").assertExists()
+        // A settings match isn't "no results".
+        compose.onNodeWithText("No apps match \"wifi\"", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Wi-Fi").performClick()
+        assertEquals(wifi, opened)
     }
 }

@@ -112,6 +112,8 @@ data class LauncherSettings(
     val searchBarAtBottom: Boolean = false,
     val autoLaunchSingleResult: Boolean = false,
     val showWebSearch: Boolean = true,
+    /** Phone settings (Wi-Fi, Bluetooth, battery...) in search results. */
+    val searchSettings: Boolean = true,
     val searchHiddenApps: Boolean = false,
     /** Hidden apps need the device's fingerprint/face/PIN before they can be seen. */
     val lockHiddenApps: Boolean = false,
@@ -129,6 +131,10 @@ data class LauncherSettings(
     // Pausing (soft, Haven-level): manual pauses (app key -> until, epoch ms) and schedules.
     val pausedApps: Map<String, Long> = emptyMap(),
     val pauseSchedules: List<PauseSchedule> = emptyList(),
+    /** Full build: snooze notifications from paused apps until the pause ends. */
+    val holdPausedNotifications: Boolean = true,
+    /** A small "2 apps paused" line under the clock on the home screen. */
+    val showPauseStatus: Boolean = true,
 ) {
     /** On the home screen, directly or inside a home folder. */
     fun isFavorite(appKey: String) = favorites.any {
@@ -183,6 +189,7 @@ data class LauncherSettings(
         put("searchBarAtBottom", searchBarAtBottom)
         put("autoLaunchSingleResult", autoLaunchSingleResult)
         put("showWebSearch", showWebSearch)
+        put("searchSettings", searchSettings)
         put("searchHiddenApps", searchHiddenApps)
         put("swipeDownAction", swipeDownAction.name)
         put("doubleTapAction", doubleTapAction.name)
@@ -190,6 +197,8 @@ data class LauncherSettings(
         put("customLabels", JSONObject().apply { customLabels.forEach { (k, v) -> put(k, v) } })
         put("pausedApps", JSONObject().apply { pausedApps.forEach { (k, v) -> put(k, v) } })
         put("pauseSchedules", JSONArray().apply { pauseSchedules.forEach { put(it.toJson()) } })
+        put("holdPausedNotifications", holdPausedNotifications)
+        put("showPauseStatus", showPauseStatus)
     }
 
     companion object {
@@ -265,6 +274,7 @@ data class LauncherSettings(
                 searchBarAtBottom = json.optBoolean("searchBarAtBottom", d.searchBarAtBottom),
                 autoLaunchSingleResult = json.optBoolean("autoLaunchSingleResult", d.autoLaunchSingleResult),
                 showWebSearch = json.optBoolean("showWebSearch", d.showWebSearch),
+                searchSettings = json.optBoolean("searchSettings", d.searchSettings),
                 searchHiddenApps = json.optBoolean("searchHiddenApps", d.searchHiddenApps),
                 swipeDownAction = json.enum("swipeDownAction", d.swipeDownAction),
                 doubleTapAction = json.enum("doubleTapAction", d.doubleTapAction),
@@ -282,6 +292,8 @@ data class LauncherSettings(
                 pauseSchedules = json.optJSONArray("pauseSchedules")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(PauseSchedule::fromJson) }.distinctBy { it.id }
                 } ?: d.pauseSchedules,
+                holdPausedNotifications = json.optBoolean("holdPausedNotifications", d.holdPausedNotifications),
+                showPauseStatus = json.optBoolean("showPauseStatus", d.showPauseStatus),
             )
         }
 

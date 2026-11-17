@@ -53,12 +53,14 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import app.haven.launcher.data.SettingResult
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -139,6 +141,8 @@ class DrawerCallbacks(
     val onUnlockHidden: () -> Unit,
     val onOpenFolder: (DrawerEntry.Folder) -> Unit,
     val onDropApp: (AppItem, DrawerEntry) -> Unit,
+    /** A phone settings screen picked from search results. */
+    val onOpenSetting: (SettingResult) -> Unit = {},
 )
 
 /** Recently installed apps that haven't been opened yet; they get a small dot. */
@@ -187,7 +191,7 @@ fun AppDrawer(
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         if (!settings.searchBarAtBottom) {
-            SearchField(query, results, settings, searchFocus, callbacks)
+            SearchField(query, results, search.settings.firstOrNull(), settings, searchFocus, callbacks)
         }
         if (query.isBlank() && model.tabs.size > 1) {
             ProfileTabs(model.tabs, tab, model.categoryNames, callbacks.onSelectTab)
@@ -208,7 +212,7 @@ fun AppDrawer(
             }
         }
         if (settings.searchBarAtBottom) {
-            SearchField(query, results, settings, searchFocus, callbacks)
+            SearchField(query, results, search.settings.firstOrNull(), settings, searchFocus, callbacks)
         }
     }
 }
@@ -217,6 +221,7 @@ fun AppDrawer(
 private fun SearchField(
     query: String,
     results: List<AppItem>,
+    topSetting: SettingResult?,
     settings: LauncherSettings,
     focus: FocusRequester,
     cb: DrawerCallbacks,
@@ -262,6 +267,7 @@ private fun SearchField(
             val first = results.firstOrNull()
             when {
                 first != null -> cb.onLaunch(first, null)
+                topSetting != null -> cb.onOpenSetting(topSetting)
                 query.isNotBlank() && settings.showWebSearch -> SystemActions.webSearch(context, query)
             }
         }),
@@ -819,7 +825,7 @@ private fun SearchResults(query: String, search: SearchState, settings: Launcher
                 }
             }
         }
-        if (results.isEmpty() && search.calculation == null) {
+        if (results.isEmpty() && search.calculation == null && search.settings.isEmpty()) {
             item(key = "empty") {
                 Text(
                     stringResource(R.string.search_no_results, query.trim()),
@@ -832,6 +838,19 @@ private fun SearchResults(query: String, search: SearchState, settings: Launcher
         itemsIndexed(results, key = { _, it -> it.key }) { index, item ->
             // The first result is what Enter will open, so show that.
             AppRow(item, settings, showProfileTag = true, highlighted = index == 0, cb = cb)
+        }
+        if (search.settings.isNotEmpty()) {
+            item(key = "settings-header") {
+                Text(
+                    stringResource(R.string.search_section_settings),
+                    Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 4.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            items(search.settings, key = { "setting:" + it.id }) { setting ->
+                SearchAction(setting.label, Icons.Filled.Settings) { cb.onOpenSetting(setting) }
+            }
         }
         if (search.canUnlockHidden) {
             item(key = "unlock") {
