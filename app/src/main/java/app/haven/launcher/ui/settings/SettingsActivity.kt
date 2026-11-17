@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import app.haven.launcher.data.AppItem
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -70,6 +74,7 @@ import app.haven.launcher.data.AppCategory
 import app.haven.launcher.data.BadgeStyle
 import app.haven.launcher.data.ClockFormat
 import app.haven.launcher.system.NotificationBadges
+import app.haven.launcher.system.FreezeAvailability
 import app.haven.launcher.ui.components.NotificationAccessDisclosure
 import app.haven.launcher.data.DrawerSort
 import app.haven.launcher.data.ClockSize
@@ -88,6 +93,7 @@ import app.haven.launcher.data.TextColorMode
 import app.haven.launcher.data.ThemeMode
 import app.haven.launcher.focus.PauseSchedule
 import app.haven.launcher.focus.PausesPage
+import app.haven.launcher.focus.nextOccurrence
 import app.haven.launcher.focus.ScheduleEditor
 import app.haven.launcher.haven
 import app.haven.launcher.system.DeviceAuth
@@ -197,6 +203,8 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                 Page.PAUSES -> {
                     val apps by vm.allApps.collectAsStateWithLifecycle()
                     val repo = LocalContext.current.haven.settings
+                    val context = LocalContext.current
+                    val resources = LocalResources.current
                     val pauses by vm.pauses.collectAsStateWithLifecycle()
                     val held by NotificationBadges.held.collectAsStateWithLifecycle()
                     PausesPage(
@@ -205,7 +213,18 @@ private fun SettingsRoot(vm: LauncherViewModel, settings: LauncherSettings, star
                         held = held,
                         schedules = settings.pauseSchedules,
                         onUnpause = vm::unpause,
-                        notificationControls = { NotificationHoldControls(settings) },
+                        onStartNow = { schedule ->
+                            val until = nextOccurrence(schedule.endMinute, System.currentTimeMillis())
+                            repo.pauseApps(schedule.apps, until)
+                            val time = android.text.format.DateUtils.formatDateTime(context, until, android.text.format.DateUtils.FORMAT_SHOW_TIME)
+                            SystemActions.toast(context, resources.getString(R.string.schedule_started, time))
+                        },
+                        notificationControls = {
+                            Column {
+                                FreezeControls(vm, settings)
+                                NotificationHoldControls(settings)
+                            }
+                        },
                         onToggleSchedule = { sch, on -> repo.upsertSchedule(sch.copy(enabled = on)) },
                         onEditSchedule = {
                             editingSchedule = it.id
@@ -403,6 +422,9 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
             )
         }
         item { SwitchRow(stringResource(R.string.setting_show_date), s.showDate, { v -> repo.update { it.copy(showDate = v) } }) }
+        if (s.showDate) {
+            item { SwitchRow(stringResource(R.string.setting_battery), s.showBattery, { v -> repo.update { it.copy(showBattery = v) } }) }
+        }
         item {
             SwitchRow(
                 stringResource(R.string.setting_drawer_button),
@@ -686,6 +708,8 @@ private fun MainSettings(vm: LauncherViewModel, s: LauncherSettings, onOpenPage:
                 }
             }
         }
+        item { SideSwipeRow(vm, stringResource(R.string.gesture_swipe_left), s.swipeLeftApp) { key -> repo.update { it.copy(swipeLeftApp = key) } } }
+        item { SideSwipeRow(vm, stringResource(R.string.gesture_swipe_right), s.swipeRightApp) { key -> repo.update { it.copy(swipeRightApp = key) } } }
         item { InfoRow(stringResource(R.string.gesture_long_press), stringResource(R.string.gesture_long_press_value)) }
 
         // ---- Appearance ----
@@ -1118,4 +1142,115 @@ private fun NotificationHoldControls(s: LauncherSettings) {
         ClickRow(stringResource(R.string.badges_access_needed), stringResource(R.string.pause_hold_needs_access)) { disclosure = true }
     }
     if (disclosure) NotificationAccessDisclosure(onDismiss = { disclosure = false })
+}
+
+/**
+ * "Freeze paused apps": the setup steps for Shizuku in order (get it, start it, allow Haven),
+ * then the switch. Only the next step is shown, so it never feels like a wall of options.
+ */
+@Composable
+private fun FreezeControls(vm: LauncherViewModel, s: LauncherSettings) {
+    val context = LocalContext.current
+    val repo = context.haven.settings
+    val freezer = vm.freezer
+    val availability by freezer.availability.collectAsStateWithLifecycle()
+    val frozen by freezer.frozen.collectAsStateWithLifecycle()
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { freezer.refreshAvailability() }
+    val ready = availability == FreezeAvailability.READY
+
+    SwitchRow(
+        stringResource(R.string.setting_freeze),
+        s.freezePausedApps,
+        { v -> repo.update { it.copy(freezePausedApps = v) } },
+        summary = stringResource(R.string.setting_freeze_summary),
+        // Turning it off always works (unfreezing waits for Shizuku); turning it on needs Shizuku.
+        enabled = ready || s.freezePausedApps,
+    )
+    when (availability) {
+        FreezeAvailability.READY -> Unit
+        FreezeAvailability.NOT_INSTALLED -> {
+            InfoRow("", stringResource(R.string.freeze_explainer))
+            ClickRow(stringResource(R.string.freeze_get_shizuku), stringResource(R.string.freeze_get_shizuku_summary)) { freezer.openDownloadPage() }
+        }
+        FreezeAvailability.NOT_RUNNING ->
+            ClickRow(stringResource(R.string.freeze_start_shizuku), stringResource(R.string.freeze_start_shizuku_summary)) { freezer.openShizuku() }
+        FreezeAvailability.NEEDS_PERMISSION ->
+            ClickRow(stringResource(R.string.freeze_allow), stringResource(R.string.freeze_allow_summary)) { freezer.requestPermission() }
+    }
+    if (!ready && frozen.isNotEmpty()) {
+        InfoRow("", pluralString(R.plurals.freeze_stuck, frozen.size))
+    }
+}
+
+/** "Swipe left / right": the app it opens, or nothing. Tap to choose. */
+@Composable
+private fun SideSwipeRow(vm: LauncherViewModel, title: String, appKey: String?, onPick: (String?) -> Unit) {
+    val apps by vm.allApps.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf(false) }
+    val current = appKey?.let { k -> apps.firstOrNull { it.key == k } }
+    ClickRow(title, current?.label ?: stringResource(R.string.gesture_swipe_side_none)) { picking = true }
+    if (picking) {
+        AppPickerDialog(
+            apps = apps.filter { !it.isHidden && it.app.profile.isVisible },
+            selected = appKey,
+            onPick = {
+                onPick(it)
+                picking = false
+            },
+            onDismiss = { picking = false },
+        )
+    }
+}
+
+/** Pick one app (or none), with search, since a phone can have hundreds. */
+@Composable
+private fun AppPickerDialog(apps: List<AppItem>, selected: String?, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    var filter by rememberSaveable { mutableStateOf("") }
+    val visible = remember(apps, filter) {
+        if (filter.isBlank()) apps else apps.filter { Search.score(it.search, filter) > 0 }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.pick_app_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = filter,
+                    onValueChange = { filter = it.take(60) },
+                    placeholder = { Text(stringResource(R.string.search_apps)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LazyColumn(Modifier.padding(top = 8.dp).heightIn(max = 380.dp)) {
+                    item(key = "none") {
+                        PickerRow(selected == null, { onPick(null) }) {
+                            Text(stringResource(R.string.action_nothing), Modifier.weight(1f))
+                        }
+                    }
+                    itemsIndexed(visible, key = { _, it -> it.key }) { _, app ->
+                        PickerRow(selected == app.key, { onPick(app.key) }) {
+                            AppIcon(app, 32.dp)
+                            Spacer(Modifier.width(14.dp))
+                            Text(app.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
+}
+
+@Composable
+private fun PickerRow(selected: Boolean, onClick: () -> Unit, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+        RadioButton(selected = selected, onClick = null)
+    }
 }

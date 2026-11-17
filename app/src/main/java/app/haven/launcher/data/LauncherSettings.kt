@@ -135,6 +135,15 @@ data class LauncherSettings(
     val holdPausedNotifications: Boolean = true,
     /** A small "2 apps paused" line under the clock on the home screen. */
     val showPauseStatus: Boolean = true,
+    /** Really stop paused apps (suspend + force stop) through Shizuku, when it's set up. */
+    val freezePausedApps: Boolean = false,
+
+    // Home extras
+    /** Apps opened by swiping left / right on the home screen (AppKey strings), or none. */
+    val swipeLeftApp: String? = null,
+    val swipeRightApp: String? = null,
+    /** Battery level next to the date. */
+    val showBattery: Boolean = false,
 ) {
     /** On the home screen, directly or inside a home folder. */
     fun isFavorite(appKey: String) = favorites.any {
@@ -199,6 +208,10 @@ data class LauncherSettings(
         put("pauseSchedules", JSONArray().apply { pauseSchedules.forEach { put(it.toJson()) } })
         put("holdPausedNotifications", holdPausedNotifications)
         put("showPauseStatus", showPauseStatus)
+        put("freezePausedApps", freezePausedApps)
+        put("swipeLeftApp", swipeLeftApp ?: "")
+        put("swipeRightApp", swipeRightApp ?: "")
+        put("showBattery", showBattery)
     }
 
     companion object {
@@ -294,6 +307,10 @@ data class LauncherSettings(
                 } ?: d.pauseSchedules,
                 holdPausedNotifications = json.optBoolean("holdPausedNotifications", d.holdPausedNotifications),
                 showPauseStatus = json.optBoolean("showPauseStatus", d.showPauseStatus),
+                freezePausedApps = json.optBoolean("freezePausedApps", d.freezePausedApps),
+                swipeLeftApp = json.optString("swipeLeftApp").takeIf { AppKey.parse(it) != null },
+                swipeRightApp = json.optString("swipeRightApp").takeIf { AppKey.parse(it) != null },
+                showBattery = json.optBoolean("showBattery", d.showBattery),
             )
         }
 

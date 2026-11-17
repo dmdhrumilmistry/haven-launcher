@@ -5,6 +5,7 @@ import app.haven.launcher.data.AppRepository
 import app.haven.launcher.data.IconCache
 import app.haven.launcher.data.LaunchStats
 import app.haven.launcher.data.SettingsRepository
+import app.haven.launcher.system.AppFreezer
 import app.haven.launcher.widgets.HavenWidgetHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +23,8 @@ class HavenApp : Application() {
         private set
     lateinit var launchStats: LaunchStats
         private set
+    lateinit var freezer: AppFreezer
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +34,7 @@ class HavenApp : Application() {
         launchStats = LaunchStats(this)
         widgetHost = HavenWidgetHost(this)
         widgetHost.deleteOrphans(settings.settings.value.widgets)
+        freezer = AppFreezer(this, appScope, settings.settings)
     }
 
     override fun onTrimMemory(level: Int) {

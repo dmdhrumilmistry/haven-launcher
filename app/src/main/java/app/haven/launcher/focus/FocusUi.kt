@@ -93,8 +93,11 @@ fun pauseDescription(state: PauseState): String = when (state) {
     )
 }
 
-/** Whether a pause also holds the app's notifications, and if not, why not. */
-enum class HoldStatus { HELD, OFF, NEEDS_ACCESS, UNAVAILABLE }
+/**
+ * What a pause does beyond greying the app out: freeze it completely (Shizuku), hold its
+ * notifications (notification access), or neither, and why not.
+ */
+enum class HoldStatus { FROZEN, HELD, OFF, NEEDS_ACCESS, UNAVAILABLE }
 
 /** Next time the clock shows [minuteOfDay]: today if it's still ahead, otherwise tomorrow. */
 fun nextOccurrence(minuteOfDay: Int, nowMillis: Long): Long {
@@ -135,7 +138,13 @@ fun PauseChooserDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    stringResource(if (holdStatus == HoldStatus.HELD) R.string.pause_explainer_held else R.string.pause_explainer),
+                    stringResource(
+                        when (holdStatus) {
+                            HoldStatus.FROZEN -> R.string.pause_explainer_frozen
+                            HoldStatus.HELD -> R.string.pause_explainer_held
+                            else -> R.string.pause_explainer
+                        },
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = muted,
                 )
@@ -166,17 +175,20 @@ fun PauseChooserDialog(
                     )
                     else -> Unit
                 }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text(stringResource(R.string.pause_background_hint), style = MaterialTheme.typography.bodySmall, color = muted)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    // The system's per-app notification screen only covers Haven's own profile.
-                    if (SystemActions.isMyUser(app.app.user)) {
-                        TextButton(onClick = { SystemActions.openAppNotificationSettings(context, app.app.packageName) }) {
-                            Text(stringResource(R.string.action_notification_settings))
+                // Frozen already means stopped and silent: no need for the manual routes.
+                if (holdStatus != HoldStatus.FROZEN) {
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    Text(stringResource(R.string.pause_background_hint), style = MaterialTheme.typography.bodySmall, color = muted)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        // The system's per-app notification screen only covers Haven's own profile.
+                        if (SystemActions.isMyUser(app.app.user)) {
+                            TextButton(onClick = { SystemActions.openAppNotificationSettings(context, app.app.packageName) }) {
+                                Text(stringResource(R.string.action_notification_settings))
+                            }
                         }
-                    }
-                    TextButton(onClick = { SystemActions.openAppInfo(context, app.app.component, app.app.user) }) {
-                        Text(stringResource(R.string.action_force_stop))
+                        TextButton(onClick = { SystemActions.openAppInfo(context, app.app.component, app.app.user) }) {
+                            Text(stringResource(R.string.action_force_stop))
+                        }
                     }
                 }
             }
@@ -227,6 +239,7 @@ fun AppPausedDialog(
     app: AppItem,
     state: PauseState,
     held: HeldNotifications?,
+    frozen: Boolean,
     onOpenAnyway: () -> Unit,
     onUnpause: () -> Unit,
     onDismiss: () -> Unit,
@@ -238,6 +251,14 @@ fun AppPausedDialog(
         text = {
             Column {
                 Text(pauseDescription(state))
+                if (frozen) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.app_frozen_detail),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 heldDescription(held)?.let {
                     Spacer(Modifier.height(6.dp))
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -277,6 +298,8 @@ fun PausesPage(
     onEditSchedule: (PauseSchedule) -> Unit,
     onAddSchedule: () -> Unit,
     notificationControls: @Composable () -> Unit = {},
+    /** Pause a schedule's apps right away, until its end time: a one-tap focus session. */
+    onStartNow: (PauseSchedule) -> Unit = {},
 ) {
     val byKey = remember(apps) { apps.associateBy { it.key } }
     val paused = remember(pauses, byKey) {
@@ -335,6 +358,9 @@ fun PausesPage(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                if (schedule.apps.isNotEmpty() && schedule.startMinute != schedule.endMinute) {
+                    TextButton(onClick = { onStartNow(schedule) }) { Text(stringResource(R.string.schedule_start_now)) }
                 }
                 Switch(checked = schedule.enabled, onCheckedChange = { onToggleSchedule(schedule, it) })
             }

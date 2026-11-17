@@ -19,6 +19,8 @@
 
     <!-- Package visibility (Android 11+): launchable apps plus the intents we offer as shortcuts. -->
     <queries>
+        <!-- Shizuku, which "Freeze paused apps" uses when the user installs and allows it. -->
+        <package android:name="moe.shizuku.privileged.api" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
@@ -143,5 +145,15 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
+
+        <!-- Receives Shizuku's binder when the user has installed and started it. Only Shizuku
+             (running as the shell or root user) holds this permission. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 </manifest>

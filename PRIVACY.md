@@ -33,6 +33,9 @@ These are off until you turn them on, and only exist in the "full" version:
   pause ends. Haven only looks at which app a notification is from; it never reads, stores or
   shares notification content.
 
+- **Shizuku** (optional, only if you install it and allow Haven there): used only to freeze and
+  unfreeze the apps you pause. Haven runs no other commands with it.
+
 Other permissions: expanding the status bar (swipe down for notifications), opening the system
 uninstall dialog, fingerprint/face prompt (for locked hidden apps), and seeing Android 15's private
 space. None of them involve your personal data leaving the device.

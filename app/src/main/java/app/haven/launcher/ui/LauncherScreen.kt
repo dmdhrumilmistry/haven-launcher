@@ -107,6 +107,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.ui.Alignment
 import app.haven.launcher.focus.HoldStatus
+import app.haven.launcher.system.FreezeAvailability
 import app.haven.launcher.focus.PauseSummary
 import app.haven.launcher.system.HeldNotifications
 import app.haven.launcher.ui.components.NotificationAccessDisclosure
@@ -133,6 +134,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     val pauses by vm.pauses.collectAsStateWithLifecycle()
     val badgeCounts by NotificationBadges.counts.collectAsStateWithLifecycle()
     val heldNotifications by NotificationBadges.held.collectAsStateWithLifecycle()
+    val frozenApps by vm.freezer.frozen.collectAsStateWithLifecycle()
+    val freezeAvailability by vm.freezer.availability.collectAsStateWithLifecycle()
     var pauseTarget by remember { mutableStateOf<AppItem?>(null) }
     var accessDisclosure by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
@@ -208,6 +211,8 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         vm.onResume()
         notificationAccess = NotificationBadges.hasAccess(context)
+        // Back home: apps opened anyway while paused get frozen again.
+        vm.freezer.onHomeResumed()
     }
     // Coming back from an app should land on a calm home screen, not a half-finished search.
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
@@ -308,7 +313,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
         }
     }
 
-    val homeCallbacks = remember(settings.doubleTapAction, dragDistancePx) {
+    val homeCallbacks = remember(settings.doubleTapAction, settings.swipeLeftApp, settings.swipeRightApp, dragDistancePx) {
         HomeCallbacks(
             onOpen = { entry, bounds ->
                 when (entry) {
@@ -352,6 +357,11 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
             onReorder = vm::reorderHome,
             onMerge = vm::dropOnHome,
             onOpenPauses = { SystemActions.openLauncherSettings(context, SettingsActivity.PAGE_PAUSES) },
+            onSwipeSide = if (settings.swipeLeftApp == null && settings.swipeRightApp == null) null else { left ->
+                val key = if (left) settings.swipeLeftApp else settings.swipeRightApp
+                val item = key?.let { k -> vm.allApps.value.firstOrNull { it.key == k } }
+                if (item != null) vm.launch(item, view, null)
+            },
         )
     }
 
@@ -501,6 +511,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                         sheetApp = null
                     },
                     pauseState = pauses[live.key],
+                    isFrozen = live.badgeKey() in frozenApps,
                     onPause = {
                         sheetApp = null
                         pauseTarget = live
@@ -666,6 +677,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
 
             pauseTarget?.let { app ->
                 val holdStatus = when {
+                    settings.freezePausedApps && freezeAvailability == FreezeAvailability.READY -> HoldStatus.FROZEN
                     !BuildConfig.NOTIFICATION_BADGES -> HoldStatus.UNAVAILABLE
                     !settings.holdPausedNotifications -> HoldStatus.OFF
                     !notificationAccess -> HoldStatus.NEEDS_ACCESS
@@ -683,7 +695,7 @@ fun LauncherScreen(vm: LauncherViewModel, widgets: HomeWidgets) {
                 NotificationAccessDisclosure(onDismiss = { accessDisclosure = false })
             }
 
-            PromptDialog(prompt, vm, view, heldNotifications)
+            PromptDialog(prompt, vm, view, heldNotifications, frozenApps)
         }
     }
 }
@@ -724,6 +736,7 @@ private fun PromptDialog(
     vm: LauncherViewModel,
     view: android.view.View,
     held: Map<String, HeldNotifications>,
+    frozen: Set<String>,
 ) {
     val context = LocalContext.current
     when (prompt) {
@@ -732,6 +745,7 @@ private fun PromptDialog(
             app = prompt.item,
             state = prompt.state,
             held = held[prompt.item.badgeKey()],
+            frozen = prompt.item.badgeKey() in frozen,
             onOpenAnyway = { vm.launchNow(prompt.item, view, null) },
             onUnpause = { vm.unpauseApp(prompt.item) },
             onDismiss = vm::dismissPrompt,

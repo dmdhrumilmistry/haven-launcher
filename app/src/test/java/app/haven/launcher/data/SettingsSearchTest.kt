@@ -47,12 +47,24 @@ class SettingsSearchTest {
 
     @Test
     fun newSettingsSurviveARoundTripAndOldBackupsGetDefaults() {
-        val custom = LauncherSettings(holdPausedNotifications = false, showPauseStatus = false, searchSettings = false)
+        val custom = LauncherSettings(
+            holdPausedNotifications = false,
+            showPauseStatus = false,
+            searchSettings = false,
+            freezePausedApps = true,
+            swipeLeftApp = "com.example.camera/.Main#0",
+            swipeRightApp = null,
+            showBattery = true,
+        )
         assertEquals(custom, LauncherSettings.fromJson(custom.toJson()))
         val old = LauncherSettings.fromJson(org.json.JSONObject().put("version", 2))
         assertTrue(old.holdPausedNotifications)
         assertTrue(old.showPauseStatus)
         assertTrue(old.searchSettings)
+        assertFalse(old.freezePausedApps)
+        // A junk app key in a hand-edited backup is dropped, not kept as a dead gesture.
+        val junk = LauncherSettings.fromJson(org.json.JSONObject().put("swipeLeftApp", "not a key"))
+        assertEquals(null, junk.swipeLeftApp)
         assertFalse(LauncherSettings.fromJson(custom.toJson()).holdPausedNotifications)
     }
 }

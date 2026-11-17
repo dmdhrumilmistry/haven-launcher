@@ -102,6 +102,11 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
+    // Optional "freeze" for paused apps. Shizuku (open source, Apache 2.0) lets the user grant Haven
+    // shell-level access on their own phone; nothing is used unless they install and allow it.
+    val shizuku = "13.1.5"
+    implementation("dev.rikka.shizuku:api:$shizuku")
+    implementation("dev.rikka.shizuku:provider:$shizuku")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")

@@ -12,6 +12,8 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Clock and date (tap the clock for alarms, tap the date for the calendar), plus your next alarm if it's within 18 hours
 - A small "2 apps paused · next ends 5:00 PM" line under the clock while apps are paused; tap it to manage pauses (optional)
 - Undo after removing an app from the home screen or hiding it
+- Swipe left or right anywhere on the home screen to open an app you choose (Settings > Gestures)
+- Battery level next to the date (optional)
 - **Widgets**: long-press empty space > Widgets. Long-press a widget to resize, reorder, reconfigure or remove it. Apps can also add widgets and shortcuts to the home screen themselves
 - **Folders**: drag an app onto another to make a folder (named after the apps' type when they share one, e.g. "Social"); drop more apps onto it. Tap to open, tap the name to rename, long-press an app inside to remove it
 - Long-press and drag apps to rearrange them (or lock the layout to prevent accidents)
@@ -26,7 +28,9 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 - Suggested apps row, learned only on the phone; a dot marks newly installed apps you haven't opened
 - **Pause apps** from their long-press menu (15 or 30 minutes, 1 or 2 hours, the rest of today, until a time you pick, or until you unpause), or on **schedules** (days and times, overnight supported). Paused apps are greyed out and ask before opening
   - **Notifications are held** (full build, with notification access): notifications from paused apps leave the shade and come back by themselves when the pause ends. Calls, alarms and anything ongoing always get through. Android alerts before a listener can act, so a sound may still play once as one arrives, and held notifications can't be brought back early: unpausing tells you when they'll return
-  - Android doesn't let a home screen stop other apps, so the pause dialog links straight to the app's notification settings and to App info to **force stop** it (a force-stopped app gets no pushes until you open it again). For hard limits, the long-press menu links to Digital Wellbeing's app timer
+  - **Freeze paused apps** (optional, both builds): really stops them. Haven suspends the app (it can't open, and Android hides its notifications) and force-stops it (no background work, pushes or alarms) until the pause ends. Android only allows this with shell or root rights, so it uses [Shizuku](https://shizuku.rikka.app/), a free open-source app you install and start yourself; Settings > Pausing walks you through it one step at a time. "Open anyway" unfreezes the app until you're back on the home screen, then it's frozen again. Haven only unfreezes what it froze itself. Turn it off before uninstalling Haven or Shizuku so frozen apps are released
+  - Without Shizuku, the pause dialog links to the app's notification settings and to App info to **force stop** it (a force-stopped app gets no pushes until you open it again). For hard limits, the long-press menu links to Digital Wellbeing's app timer
+  - **Start now** on any schedule pauses its apps straight away until the schedule's end time: a one-tap focus session
   - Settings > Pausing lists every paused app (by hand or by schedule) with how many notifications are held
 - Calculator: type `12*7+3` in search and tap the answer to copy it
 - **Phone settings in search**: type "wifi", "bluetooth", "battery", "dnd", "storage"... to jump to that settings screen (only screens your phone has are offered; can be turned off)
@@ -78,6 +82,8 @@ Built with Kotlin and Jetpack Compose (Material 3). Supports Android 8.0 (API 26
 | `ACCESS_HIDDEN_PROFILES` | Android 15+: lets the home app show the private space entry |
 | Accessibility service (**full build only**, off until you enable it) | Only for double-tap to lock. It reads nothing on screen. Haven explains this before sending you to settings |
 | Notification access (**full build only**, off until you enable it) | Only to count notifications per app for icon badges, and to hold notifications from paused apps until the pause ends. Never reads or stores their content |
+
+| Shizuku (optional, only if you install it and allow Haven) | Only to freeze and unfreeze paused apps (`pm suspend`, `pm unsuspend`, `am force-stop`) |
 
 No internet, no storage, no contacts, no location.
 

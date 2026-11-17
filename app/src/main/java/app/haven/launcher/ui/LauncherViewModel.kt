@@ -162,6 +162,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     private val settingsRepo = application.haven.settings
     private val appsRepo = application.haven.apps
     private val launchStats = application.haven.launchStats
+    val freezer = application.haven.freezer
 
     val settings: StateFlow<LauncherSettings> = settingsRepo.settings
     val snapshot: StateFlow<AppsSnapshot> = appsRepo.snapshot
@@ -340,8 +341,16 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         return launchNow(item, view, bounds)
     }
 
-    /** Skips the pause check: for "Open anyway". */
+    /** Skips the pause check: for "Open anyway". A frozen app is unfrozen first. */
     fun launchNow(item: AppItem, view: View? = null, bounds: Rect? = null): Boolean {
+        val packageKey = NotificationHold.packageKey(item.key)
+        if (packageKey != null && packageKey in freezer.frozen.value) {
+            viewModelScope.launch {
+                freezer.thawForLaunch(packageKey)
+                if (SystemActions.launchApp(app, item.app, view, bounds)) stats.recordLaunch(item.key)
+            }
+            return true
+        }
         val ok = SystemActions.launchApp(app, item.app, view, bounds)
         if (ok) stats.recordLaunch(item.key) else appsRepo.reload()
         return ok

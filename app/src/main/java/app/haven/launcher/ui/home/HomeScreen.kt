@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +95,8 @@ class HomeCallbacks(
     val onMerge: (draggedId: String, targetId: String) -> Unit,
     /** Tapping the "apps paused" line under the clock. */
     val onOpenPauses: () -> Unit = {},
+    /** Swipe left (true) or right (false) anywhere on the home screen; null when neither is set. */
+    val onSwipeSide: ((left: Boolean) -> Unit)? = null,
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -158,6 +161,30 @@ fun HomeScreen(
                     onLongPress = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         cb.onBackgroundLongPress()
+                    },
+                )
+            }
+            .pointerInput(callbacks.onSwipeSide != null) {
+                if (callbacks.onSwipeSide == null) return@pointerInput
+                val tracker = VelocityTracker()
+                var total = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        total = 0f
+                    },
+                    onDragEnd = {
+                        val velocity = tracker.calculateVelocity().x
+                        val far = kotlin.math.abs(total) > 64.dp.toPx()
+                        if (far || kotlin.math.abs(velocity) > 1200f) {
+                            haptics.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                            cb.onSwipeSide?.invoke(if (far) total < 0 else velocity < 0)
+                        }
+                    },
+                    onHorizontalDrag = { change, dx ->
+                        change.consume()
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        total += dx
                     },
                 )
             }
@@ -310,7 +337,12 @@ private fun ClockBlock(
             )
         }
         if (settings.showDate) {
-            val dateLine = if (text.alarm != null) stringResource(R.string.date_with_alarm, text.date, text.alarm) else text.date
+            val battery = if (settings.showBattery) rememberBattery() else null
+            val withAlarm = if (text.alarm != null) stringResource(R.string.date_with_alarm, text.date, text.alarm) else text.date
+            val dateLine = if (battery == null) withAlarm else "$withAlarm · " + stringResource(
+                if (battery.charging) R.string.battery_charging else R.string.battery_level,
+                battery.percent,
+            )
             Text(
                 dateLine,
                 color = color.copy(alpha = 0.85f),

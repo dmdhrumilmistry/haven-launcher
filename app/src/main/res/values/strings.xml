@@ -120,6 +120,18 @@
     <string name="action_app_timer">App timer (Digital Wellbeing)</string>
     <string name="pause_title">Pause %1$s</string>
     <string name="pause_explainer">It\'ll be greyed out in Haven and ask before opening. Notifications still come through.</string>
+    <string name="pause_explainer_frozen">It\'ll be frozen until the pause ends: closed, stopped in the background and silent, with no notifications. Haven asks before opening it.</string>
+    <string name="app_frozen">Frozen</string>
+    <string name="app_frozen_detail">Frozen: it isn\'t running and gets no notifications. Opening it anyway unfreezes it until you\'re back on the home screen.</string>
+    <string name="setting_freeze">Freeze paused apps</string>
+    <string name="setting_freeze_summary">Really stops them: closed, no background activity, no notifications, and they can\'t open until the pause ends. Turn this off before uninstalling Haven or Shizuku, so frozen apps are unfrozen.</string>
+    <string name="freeze_explainer">Android only lets apps with special access stop other apps. Haven gets it through Shizuku, a free open-source app you start yourself (with wireless debugging, or root). Haven only uses it to freeze and unfreeze the apps you pause.</string>
+    <string name="freeze_get_shizuku">Get Shizuku</string>
+    <string name="freeze_get_shizuku_summary">Install it, open it and follow its steps to start it</string>
+    <string name="freeze_start_shizuku">Start Shizuku</string>
+    <string name="freeze_start_shizuku_summary">Shizuku isn\'t running. Open it and tap Start (without root, it needs starting again after the phone restarts)</string>
+    <string name="freeze_allow">Allow Haven in Shizuku</string>
+    <string name="freeze_allow_summary">Shizuku asks you once</string>
     <string name="pause_explainer_held">It\'ll be greyed out in Haven and ask before opening. Its notifications are held and come back when the pause ends.</string>
     <string name="pause_15_min">For 15 minutes</string>
     <string name="pause_30_min">For 30 minutes</string>
@@ -128,7 +140,7 @@
     <string name="pause_until_time">Until a time…</string>
     <string name="pause_hold_off">Notifications aren\'t held. Turn on \"Hold notifications\" in Haven settings > Pausing.</string>
     <string name="pause_hold_needs_access">To hold its notifications too, allow Haven notification access.</string>
-    <string name="pause_background_hint">Android doesn\'t let a home screen stop other apps. To silence it for real, turn off its notifications or force stop it in App info (it stays stopped until you open it).</string>
+    <string name="pause_background_hint">To stop it completely, turn on \"Freeze paused apps\" in Haven settings > Pausing. Or turn off its notifications, or force stop it in App info (it stays stopped until you open it).</string>
     <string name="action_notification_settings">Notifications</string>
     <string name="action_force_stop">Force stop</string>
     <string name="held_count_until">%1$s held until %2$s</string>
@@ -333,6 +345,15 @@
     <string name="gesture_swipe_up">Swipe up</string>
     <string name="gesture_swipe_up_value">Open app drawer</string>
     <string name="gesture_swipe_down">Swipe down</string>
+    <string name="gesture_swipe_left">Swipe left</string>
+    <string name="gesture_swipe_right">Swipe right</string>
+    <string name="gesture_swipe_side_none">Nothing. Tap to pick an app to open</string>
+    <string name="pick_app_title">Open which app?</string>
+    <string name="setting_battery">Battery level next to the date</string>
+    <string name="battery_level">%1$d%%</string>
+    <string name="battery_charging">%1$d%% ⚡</string>
+    <string name="schedule_start_now">Start now</string>
+    <string name="schedule_started">Paused until %1$s</string>
     <string name="gesture_double_tap">Double-tap</string>
     <string name="gesture_long_press">Long-press empty space</string>
     <string name="gesture_long_press_value">Widgets, wallpaper, home apps and settings</string>
@@ -400,6 +421,10 @@
     <plurals name="held_notifications">
         <item quantity="one">%d notification</item>
         <item quantity="other">%d notifications</item>
+    </plurals>
+    <plurals name="freeze_stuck">
+        <item quantity="one">%d frozen app is waiting to be unfrozen. Start Shizuku so Haven can unfreeze it.</item>
+        <item quantity="other">%d frozen apps are waiting to be unfrozen. Start Shizuku so Haven can unfreeze them.</item>
     </plurals>
     <plurals name="hidden_count">
         <item quantity="one">%d app hidden</item>
